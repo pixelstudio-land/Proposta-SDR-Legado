@@ -1,4 +1,4 @@
-# Proposta: Operação Comercial com IA na Legado Performance
+# Proposta: Máquina Comercial Legado
 
 Para: Leo  
 Prazo: 7 dias de implementação  
@@ -15,7 +15,7 @@ Para a Legado Performance, estruturei um modelo seguro, rápido de rodar e que g
 2. A inteligência artificial responde em menos de 10 segundos.
 3. Ela qualifica o contato: pergunta nicho, faturamento e verba para anúncios.
 4. Curiosos são filtrados sem gastar tempo da equipe.
-5. O lead pronto e com interesse real é enviado direto para o WhatsApp do seu SDR, com o resumo da conversa.
+5. O lead pronto e com interesse real dispara automaticamente um webhook que entrega o contato direto no WhatsApp do seu SDR, com o resumo da conversa.
 
 ![Painel da Máquina Comercial de IA](assets/ai_commercial_dashboard.jpg)
 
@@ -38,6 +38,15 @@ Usamos a Legado como vitrine e vendemos essa mesma automação para os clientes 
 
 ![Exemplo de Atendimento no Direct](assets/instagram_ai_chat.jpg)
 
+## Simulação de Funil Sequencial (Exemplo Mensal)
+
+* 1.200 contatos iniciados no Direct (via tráfego).
+* 840 contatos concluem a triagem da IA (70% de engajamento).
+* 294 leads aprovados no perfil de cliente ideal (35% dos triados) e enviados automaticamente via webhook para o WhatsApp do SDR.
+* 74 reuniões confirmadas na agenda (25% de agendamento pelo SDR).
+
+Toda a matemática segue uma esteira sequencial e sem perda de lógica.
+
 ## Cronograma de 7 Dias
 
 * Dia 1: Alinhamento das perguntas de qualificação e regras de corte.
@@ -56,6 +65,8 @@ O custo técnico mensal é baixo e pago direto às plataformas:
 * ManyChat (canal oficial com a Meta): cerca de 85 reais por mês.
 * Gateway de WhatsApp: zero a 80 reais por mês.  
 Total: menos de 250 reais por mês.
+
+O investimento para a implementação da Máquina Comercial Legado e o formato da nossa parceria na venda da Máquina de Orçamentos para os seus clientes serão alinhados diretamente em nossa conversa.
 
 ## Próximo Passo
 

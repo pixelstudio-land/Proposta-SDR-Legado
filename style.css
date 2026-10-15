@@ -1052,3 +1052,134 @@ a {
   .quick-stats-grid, .results-grid { grid-template-columns: 1fr; }
   .header-status { display: none; }
 }
+
+/* ==========================================================================
+   Modal de Especificação Técnica (Memorial Descritivo)
+   ========================================================================== */
+
+.spec-link-btn {
+  background: transparent;
+  border: none;
+  color: var(--emerald-primary);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  transition: var(--transition);
+}
+
+.spec-link-btn:hover {
+  color: #34d399;
+}
+
+.spec-modal {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1000;
+  background: rgba(3, 7, 18, 0.85);
+  backdrop-filter: blur(12px);
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.spec-modal.active {
+  display: flex;
+}
+
+.spec-modal-dialog {
+  background: #0d1527;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 860px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7);
+  animation: modalFadeIn 0.25s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.spec-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 2rem;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.spec-modal-title {
+  font-size: 1.25rem;
+  font-family: var(--font-heading);
+  color: var(--text-primary);
+}
+
+.spec-close-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 1.25rem;
+  line-height: 1;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+
+.spec-close-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.4);
+}
+
+.spec-modal-body {
+  padding: 2rem;
+  overflow-y: auto;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.spec-modal-body h3 {
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  margin: 1.5rem 0 0.5rem;
+}
+
+.spec-modal-body h3:first-child {
+  margin-top: 0;
+}
+
+.spec-modal-body p {
+  margin-bottom: 1rem;
+}
+
+.spec-modal-body ul, .spec-modal-body ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.spec-modal-body li {
+  margin-bottom: 0.4rem;
+}
+
+.spec-modal-body strong {
+  color: var(--text-primary);
+}
+

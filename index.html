@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Máquina Comercial de IA | Legado Performance</title>
-  <meta name="description" content="Proposta de implementação da Máquina Comercial com IA para a Legado Performance e produto Máquina de Orçamentos em 7 dias.">
+  <title>Máquina Comercial Legado</title>
+  <meta name="description" content="Proposta de implementação da Máquina Comercial Legado e produto Máquina de Orçamentos em 7 dias.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
@@ -16,7 +16,7 @@
     <div class="container header-inner">
       <div class="brand">
         <span class="brand-badge">PROPOSTA</span>
-        <span class="brand-title">Legado Performance <span class="highlight">/ AI Engine</span></span>
+        <span class="brand-title">Máquina Comercial <span class="highlight">Legado</span></span>
       </div>
       <div class="header-status">
         <span class="status-pulse"></span>
@@ -36,7 +36,7 @@
       </div>
       <h1 class="hero-title">
         Leo, desenhei a nossa <br>
-        <span class="gradient-text">Máquina Comercial de IA</span>
+        <span class="gradient-text">Máquina Comercial Legado</span>
       </h1>
       <p class="hero-subtitle">
         Filtrei a engenharia real daquele funil do vídeo para a <strong>Legado Performance</strong> rodar em <strong>7 dias</strong>. Sem risco para a conta oficial, qualificando reuniões para o seu SDR e pronta para vendermos como <strong>Máquina de Orçamentos</strong> para os seus clientes.
@@ -360,50 +360,54 @@
     </div>
   </section>
 
-  <!-- Section: Calculadora Interativa -->
+  <!-- Section: Calculadora Interativa com Lógica de Funil Sequencial -->
   <section id="calculadora" class="section calc-section">
     <div class="container">
       <div class="calc-card">
-        <div class="section-badge">SIMULADOR</div>
-        <h2 class="section-title">Simulação de Volume e Reuniões</h2>
-        <p class="section-desc">Ajuste o volume diário de conversas no Direct e veja a estimativa para o WhatsApp:</p>
+        <div class="section-badge">SIMULADOR DE PERFORMANCE</div>
+        <h2 class="section-title">Funil Sequencial: Do Direct à Reunião na Agenda</h2>
+        <p class="section-desc">Ajuste o volume diário de conversas no Direct e veja a projeção etapa por etapa sem quebra de lógica:</p>
 
         <div class="slider-control">
           <div class="slider-header">
-            <span>Conversas iniciadas por dia:</span>
-            <span id="sliderValue" class="slider-val">40 leads/dia</span>
+            <span>Conversas iniciadas por dia no Direct:</span>
+            <span id="sliderValue" class="slider-val">40 contatos/dia</span>
           </div>
           <input type="range" id="leadsSlider" min="10" max="150" step="5" value="40" class="custom-slider">
         </div>
 
         <div class="results-grid">
           <div class="result-box">
-            <span class="r-label">Leads no Mês</span>
+            <span class="r-label">Contatos no Direct</span>
             <span id="monthlyLeads" class="r-value">1.200</span>
           </div>
           <div class="result-box">
-            <span class="r-label">Qualificados pela IA (65%)</span>
-            <span id="qualifiedLeads" class="r-value">780</span>
+            <span class="r-label">Triagem Concluída (70%)</span>
+            <span id="engagedLeads" class="r-value">840</span>
           </div>
           <div class="result-box highlight-box">
-            <span class="r-label">Leads no WhatsApp (30%)</span>
-            <span id="whatsappOpps" class="r-value">360</span>
+            <span class="r-label">Aprovados no WhatsApp (35%)</span>
+            <span id="whatsappOpps" class="r-value">294</span>
           </div>
           <div class="result-box">
-            <span class="r-label">Reuniões com SDR (20%)</span>
-            <span id="sdrMeetings" class="r-value">72</span>
+            <span class="r-label">Reuniões com SDR (25%)</span>
+            <span id="sdrMeetings" class="r-value">74</span>
           </div>
         </div>
+
+        <p style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--text-muted); text-align: center;">
+          Matemática sequencial: 70% concluem a triagem da IA no Direct. Desses, 35% atendem aos critérios de verba/nicho e disparam o webhook direto para o WhatsApp do SDR. O SDR converte 25% em reuniões de fechamento.
+        </p>
       </div>
     </div>
   </section>
 
-  <!-- Section: Custos Transparentes -->
+  <!-- Section: Custos Transparentes de Infraestrutura -->
   <section class="section cost-section">
     <div class="container">
-      <div class="section-badge">CUSTOS OPERACIONAIS</div>
-      <h2 class="section-title">Infraestrutura Mensal Direta</h2>
-      <p class="section-desc">Custos diretos das ferramentas pagas às plataformas:</p>
+      <div class="section-badge">INFRAESTRUTURA TÉCNICA</div>
+      <h2 class="section-title">Custos Diretos de Plataforma</h2>
+      <p class="section-desc">Custos de tecnologia pagos diretamente às ferramentas, sem margem ou taxas ocultas:</p>
 
       <div class="cost-table-wrapper">
         <table class="cost-table">
@@ -449,13 +453,13 @@
         A estrutura técnica está desenhada. Com o seu alinhamento nos critérios de qualificação, iniciamos o sprint hoje mesmo.
       </p>
       <div class="cta-actions">
-        <a href="https://wa.me/?text=Fala%20Leo,%20vi%20a%20proposta%20da%20M%C3%A1quina%20de%20IA%20e%20aprovei%20o%20escopo%20de%207%20dias.%20Vamos%20come%C3%A7ar." target="_blank" class="btn btn-primary btn-large">
+        <a href="https://api.whatsapp.com/send?text=Fala,%20vi%20a%20apresenta%C3%A7%C3%A3o%20da%20M%C3%A1quina%20Comercial%20Legado%20e%20aprovei%20o%20escopo%20de%207%20dias.%20Vamos%20alinhar%20os%20pr%C3%B3ximos%20passos." target="_blank" class="btn btn-primary btn-large">
           <span>Aprovar Escopo de 7 Dias</span>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </a>
       </div>
       <div class="cta-subtext">
-        Documento completo disponível em <a href="PROPOSTA_OPERACAO_COMERCIAL_IA.md">PROPOSTA_OPERACAO_COMERCIAL_IA.md</a>
+        <button id="openSpecBtn" class="spec-link-btn">Acessar memorial descritivo e especificações técnicas</button>
       </div>
     </div>
   </section>
@@ -463,9 +467,32 @@
   <!-- Footer -->
   <footer class="site-footer">
     <div class="container footer-content">
-      <p>Legado Performance: Estratégia de Inteligência Artificial Comercial.</p>
+      <p>Máquina Comercial Legado: Estratégia de Inteligência Artificial para Vendas.</p>
     </div>
   </footer>
+
+  <!-- Modal de Especificação Técnica -->
+  <div id="specModal" class="spec-modal" role="dialog" aria-modal="true">
+    <div class="spec-modal-dialog">
+      <div class="spec-modal-header">
+        <h3 class="spec-modal-title">Memorial Descritivo: Máquina Comercial Legado</h3>
+        <button id="closeSpecBtn" class="spec-close-btn" aria-label="Fechar">&times;</button>
+      </div>
+      <div class="spec-modal-body">
+        <h3>1. Objetivo do Projeto</h3>
+        <p>Implementar uma operação autônoma de qualificação comercial para a Legado Performance no Instagram Direct e WhatsApp, além de gerar o playbook para replicação como Máquina de Orçamentos para clientes da assessoria.</p>
+        
+        <h3>2. Arquitetura Técnica</h3>
+        <p>O fluxo conecta anúncios do Meta Ads diretamente ao Instagram Direct utilizando a API oficial da Meta via ManyChat. O modelo GPT-4o-mini da OpenAI realiza o atendimento e a qualificação de critérios pré-definidos (nicho, faturamento, verba para anúncios). Leads aprovados disparam automaticamente um webhook que entrega o dossiê no WhatsApp do SDR.</p>
+
+        <h3>3. Segurança Operacional</h3>
+        <p>Adoção estrita de rotas oficiais da Meta, eliminando qualquer risco de banimento ou bloqueio de perfil da Legado Performance.</p>
+
+        <h3>4. Cronograma de Entrega</h3>
+        <p>Execução em 7 dias úteis, divididos entre definição de ICP, engenharia de prompt, integrações de webhook, baterias de teste com clientes simulados e início da operação assistida.</p>
+      </div>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>
