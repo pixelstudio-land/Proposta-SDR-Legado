@@ -45,7 +45,7 @@ Usamos a Legado como vitrine e vendemos essa mesma automação para os clientes 
 * 294 leads aprovados no perfil de cliente ideal (35% dos triados) e enviados automaticamente via webhook para o WhatsApp do SDR.
 * 74 reuniões confirmadas na agenda (25% de agendamento pelo SDR).
 
-Toda a matemática segue uma esteira sequencial e sem perda de lógica.
+Projeção estimada considerando a esteira completa de qualificação e agendamento.
 
 ## Cronograma de 7 Dias
 
