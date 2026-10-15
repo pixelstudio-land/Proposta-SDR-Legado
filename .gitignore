@@ -1,0 +1,9 @@
+# Ignorar vídeos pesados de referência
+*.mp4
+snapinsta-*.mp4
+
+# Arquivos de sistema e SO
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
