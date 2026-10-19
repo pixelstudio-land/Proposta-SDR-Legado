@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dossiê Estratégico: Máquina Comercial Legado Performance</title>
+  <style>
+    :root {
+      --primary: #0f172a;
+      --accent: #059669;
+      --accent-light: #10b981;
+      --accent-bg: #ecfdf5;
+      --danger: #dc2626;
+      --danger-bg: #fef2f2;
+      --warning: #d97706;
+      --warning-bg: #fffbeb;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --bg-card: #f8fafc;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: var(--text);
+      line-height: 1.6;
+      background: #ffffff;
+      padding: 2.5rem 1.5rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    header {
+      border-bottom: 2px solid var(--primary);
+      padding-bottom: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .doc-meta {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    h1 {
+      font-size: 2rem;
+      color: var(--primary);
+      line-height: 1.2;
+      margin-bottom: 0.5rem;
+    }
+
+    .subtitle {
+      font-size: 1.1rem;
+      color: var(--text-muted);
+    }
+
+    h2 {
+      font-size: 1.35rem;
+      color: var(--primary);
+      margin: 2.5rem 0 1rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h3 {
+      font-size: 1.1rem;
+      color: var(--primary);
+      margin: 1.25rem 0 0.5rem;
+    }
+
+    p {
+      margin-bottom: 1rem;
+      font-size: 0.95rem;
+    }
+
+    /* Evidências Visuais */
+    .evidence-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .evidence-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--bg-card);
+      text-align: center;
+    }
+
+    .evidence-img {
+      width: 100%;
+      height: 220px;
+      object-fit: cover;
+      display: block;
+      background: #000;
+    }
+
+    .evidence-caption {
+      padding: 0.75rem;
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      line-height: 1.4;
+    }
+
+    .evidence-caption strong {
+      color: var(--primary);
+      display: block;
+      margin-bottom: 0.2rem;
+    }
+
+    /* Cards de Decisão e Opções */
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+
+    .option-box {
+      border-radius: 8px;
+      padding: 1.5rem;
+      border: 1px solid var(--border);
+    }
+
+    .option-mvp {
+      background: var(--warning-bg);
+      border-color: #fde68a;
+    }
+
+    .option-pro {
+      background: var(--accent-bg);
+      border-color: #a7f3d0;
+    }
+
+    .option-badge {
+      display: inline-block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      padding: 0.2rem 0.6rem;
+      border-radius: 4px;
+      margin-bottom: 0.75rem;
+    }
+
+    .badge-mvp { background: #fef3c7; color: #b45309; }
+    .badge-pro { background: #d1fae5; color: #047857; }
+
+    .price-tag {
+      font-size: 1.75rem;
+      font-weight: 800;
+      color: var(--primary);
+      margin: 0.5rem 0 1rem;
+    }
+
+    .feature-list {
+      list-style: none;
+      font-size: 0.9rem;
+    }
+
+    .feature-list li {
+      margin-bottom: 0.5rem;
+      padding-left: 1.25rem;
+      position: relative;
+    }
+
+    .feature-list li::before {
+      position: absolute;
+      left: 0;
+      font-weight: bold;
+    }
+
+    .option-mvp .feature-list li::before { content: "!"; color: var(--warning); }
+    .option-pro .feature-list li::before { content: "✓"; color: var(--accent); }
+
+    /* Callout e Alertas */
+    .callout {
+      border-left: 4px solid var(--primary);
+      background: var(--bg-card);
+      padding: 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1.5rem 0;
+      font-size: 0.95rem;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      color: var(--primary);
+      margin-bottom: 0.4rem;
+    }
+
+    .comparison-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+    }
+
+    .comparison-table th, .comparison-table td {
+      border: 1px solid var(--border);
+      padding: 0.75rem 1rem;
+      text-align: left;
+    }
+
+    .comparison-table th {
+      background: var(--bg-card);
+      color: var(--primary);
+      font-weight: 700;
+    }
+
+    .tag-danger { color: var(--danger); font-weight: 600; }
+    .tag-success { color: var(--accent); font-weight: 600; }
+
+    @media print {
+      body { padding: 0; font-size: 12pt; }
+      .container { max-width: 100%; }
+      .evidence-grid { grid-template-columns: 1fr 1fr 1fr; }
+      .options-grid { grid-template-columns: 1fr 1fr; }
+      .no-print { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="doc-meta">
+        <span>Pixel Studio / Documento Técnico Estratégico</span>
+        <span>Apresentação Executiva</span>
+      </div>
+      <h1>Dossiê Comercial: Máquina Comercial Legado</h1>
+      <p class="subtitle">Análise técnica do vídeo de referência, riscos operacionais e os dois caminhos de implementação para a Legado Performance.</p>
+    </header>
+
+    <!-- Seção 1: Análise do Autor e da Narrativa do Vídeo -->
+    <section>
+      <h2>1. A Verdade Sobre o Vídeo: Quem é o autor e qual é o objetivo dele?</h2>
+      <p>
+        O vídeo analisado apresenta um caso intitulado <em>"Swapq Finance: Operação Comercial Autônoma"</em>, prometendo faturamento de mais de 1 milhão de reais e dizendo que <em>"é só copiar e colar tudo de graça"</em>.
+      </p>
+      <p>
+        No entanto, ao analisar a estrutura do vídeo e as provas em tela, fica claro que <strong>o autor está usando o vídeo como isca comercial</strong> para atrair leads para o próprio negócio dele.
+      </p>
+
+      <div class="evidence-grid">
+        <div class="evidence-card">
+          <img src="assets/influenciador_video.jpg" alt="Frame do Influenciador" class="evidence-img">
+          <div class="evidence-caption">
+            <strong>O Gancho de Topo de Funil</strong>
+            Promessa de ganho milionário com discurso de "copiar e colar de graça" para prender a atenção.
+          </div>
+        </div>
+
+        <div class="evidence-card">
+          <img src="assets/relatorio_video.jpg" alt="Relatório de Tração do Vídeo" class="evidence-img">
+          <div class="evidence-caption">
+            <strong>A Tela Apresentada</strong>
+            Relatório de 41 empresas abordadas e 13 oportunidades no WhatsApp (31,7% de avanço no domingo).
+          </div>
+        </div>
+
+        <div class="evidence-card">
+          <img src="assets/cta_video.jpg" alt="Chamada no final do vídeo" class="evidence-img">
+          <div class="evidence-caption">
+            <strong>A Contradição Flagrante (01:14)</strong>
+            Ele não faz disparo frio no próprio perfil: pede para "Comentar CODEX" para receber mensagem via API oficial.
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <div class="callout-title">A Narrativa Real do Mercado</div>
+        Nenhum influenciador entrega de graça um sistema pronto que gera 1 milhão de reais. O objetivo dele com esse vídeo é fazer empresários comentarem no post para receberem um funil de vendas, onde ele vende a mentoria dele, uma comunidade fechada ou uma ferramenta SaaS de revenda com assinatura recorrente.
+      </div>
+    </section>
+
+    <!-- Seção 2: Resposta Preparada para a Objeção de Comprar a Estrutura Dele -->
+    <section>
+      <h2>2. Resposta Preparada: "E se eu pagar a estrutura do cara e você implementar?"</h2>
+      <p>
+        Se o Leo levantar essa hipótese, aqui está a resposta técnica, transparente e comercialmente irrefutável:
+      </p>
+
+      <table class="comparison-table">
+        <thead>
+          <tr>
+            <th>Critério</th>
+            <th>Usar a Estrutura Pronta do Cara</th>
+            <th>Construir a Estrutura Proprietária da Legado</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Custo de Acesso</strong></td>
+            <td>Mensalidade alta em dólar ou assinatura recorrente paga para a plataforma dele.</td>
+            <td>Zero royalties. Apenas ferramentas padrão de mercado (OpenAI + ManyChat por menos de R$ 250/mês).</td>
+          </tr>
+          <tr>
+            <td><strong>Propriedade do Ativo</strong></td>
+            <td>Você aluga um software caixa-preta de terceiro. Se ele cancelar o serviço, você perde tudo.</td>
+            <td>A Legado é dona de 100% da tecnologia, dos prompts e da base de contatos.</td>
+          </tr>
+          <tr>
+            <td><strong>Revenda (Máquina de Orçamentos)</strong></td>
+            <td>Você não pode revender com margem alta porque precisa pagar licença para ele a cada cliente.</td>
+            <td>Você empacota e vende para os clientes da assessoria por R$ 3k a R$ 5k com 100% de margem.</td>
+          </tr>
+          <tr>
+            <td><strong>A Inteligência Real</strong></td>
+            <td>A ferramenta dele não conhece os critérios da Legado. O trabalho de configuração precisa ser feito de qualquer jeito.</td>
+            <td>A IA é calibrada desde o primeiro dia com a persona, regras de faturamento e objeções da Legado.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <div class="callout-title">O Ponto Central para Alinhar com o Leo</div>
+        Pagar a ferramenta do influenciador significa pagar duas vezes: a assinatura dele e o custo de quem vai configurar. Além disso, você fica refém de uma plataforma desconhecida. Construir na infraestrutura oficial da Meta garante que a Legado tenha um ativo proprietário que pode ser vendido para clientes sem dever nada a ninguém.
+      </div>
+    </section>
+
+    <!-- Seção 3: Os Dois Projetos (MVP R$ 500 vs Projeto Oficial) -->
+    <section>
+      <h2>3. As Duas Opções de Projeto na Mesa</h2>
+      <p>
+        Para que a decisão seja 100% transparente e sem falsas promessas, estruturei duas opções claras com base em risco, custo e retorno:
+      </p>
+
+      <div class="options-grid">
+        <!-- Opção 1: MVP R$ 500 -->
+        <div class="option-box option-mvp">
+          <span class="option-badge badge-mvp">Opção 1: Validação Experimental</span>
+          <h3>MVP de Disparo Frio com Riscos</h3>
+          <div class="price-tag">R$ 500 <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">(Setup Único)</span></div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Tentativa de replicar o código de scraping e disparo frio em pequena escala, com riscos assumidos.
+          </p>
+          <ul class="feature-list">
+            <li><strong>Execução com scripts não oficiais:</strong> Disparo automatizado para perfis mapeados.</li>
+            <li><strong>Limite rígido de segurança:</strong> Máximo de 20 a 25 abordagens por dia para tentar evitar bloqueio imediato.</li>
+            <li><span class="tag-danger">Risco Alto de Bloqueio:</span> O Instagram pode bloquear ou desativar a conta a qualquer momento por violação de termos de spam.</li>
+            <li><span class="tag-danger">Exige perfil descartável:</span> Não pode ser rodado na conta oficial @legadoperformance sob hipótese alguma.</li>
+            <li><strong>Sem garantia de estabilidade:</strong> Se a Meta atualizar o algoritmo na semana seguinte, o script quebra.</li>
+          </ul>
+        </div>
+
+        <!-- Opção 2: Projeto Oficial Blindado -->
+        <div class="option-box option-pro">
+          <span class="option-badge badge-pro">Opção 2: Recomendada para Negócios</span>
+          <h3>Máquina Comercial Legado (Oficial)</h3>
+          <div class="price-tag">Valor a Combinar <span style="font-size: 0.9rem; font-weight: 500; color: var(--text-muted);">(Alinhamento Direto)</span></div>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+            Estrutura profissional via API oficial da Meta conectada ao tráfego pago da Legado e WhatsApp do SDR.
+          </p>
+          <ul class="feature-list">
+            <li><span class="tag-success">Zero Risco de Banimento:</span> Utiliza 100% a API oficial da Meta. A conta oficial da Legado fica blindada.</li>
+            <li><strong>Alinhado com Tráfego Pago:</strong> Aproveita a especialidade central da Legado (anúncios para Direct).</li>
+            <li><strong>Qualificação em Tempo Real (GPT-4o-mini):</strong> Triagem automática de faturamento, nicho e orçamento para tráfego.</li>
+            <li><strong>Transbordo Automático:</strong> Notificação instantânea via webhook direto no WhatsApp do SDR com resumo do lead.</li>
+            <li><span class="tag-success">Ativo Replicável:</span> Gera o playbook para vender como "Máquina de Orçamentos" para clientes da assessoria por R$ 3k a R$ 5k.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Seção 4: O Porquê de Cada Decisão Técnica -->
+    <section>
+      <h2>4. O Racional por Trás de Cada Decisão Técnica</h2>
+      <p>
+        Cada detalhe da solução foi desenhado com base na realidade de vendas consultivas e na preservação da empresa:
+      </p>
+
+      <h3>Por que não usar disparo frio na conta principal?</h3>
+      <p>
+        O perfil oficial @legadoperformance é o maior ativo digital da empresa. Perder essa conta significa perder o histórico, a prova social e os acessos ao Gerenciador de Anúncios. O Modelo Oficial garante que a máquina rode 24 horas por dia dentro da conformidade da Meta.
+      </p>
+
+      <h3>Por que usar tráfego pago para o Direct em vez de tentar adivinhar leads?</h3>
+      <p>
+        Quando você manda mensagem fria no Instagram para quem nunca te viu, a taxa de resposta raramente passa de 5% e o lead responde defensivo. Quando você sobe um anúncio com um gancho forte de comercial e a pessoa clica, <strong>ela deu o primeiro passo</strong>. A conversa começa quente e a IA tem muito mais facilidade para qualificar e fechar a reunião para o SDR.
+      </p>
+
+      <h3>Por que entregar no WhatsApp do SDR em vez de tentar fechar tudo no Direct?</h3>
+      <p>
+        Contratos de assessoria comercial de alto valor não são fechados no chat do Instagram. O papel da IA no Direct é agir como uma recepcionista executiva: filtrar curiosos, validar o orçamento da empresa e passar a bola redonda para o SDR humano ligar ou agendar a reunião no WhatsApp.
+      </p>
+    </section>
+
+    <!-- Seção 5: Conclusão -->
+    <section>
+      <h2>5. Conclusão e Próximo Passo</h2>
+      <p>
+        Se a meta for apenas "brincar com código para ver se manda mensagem", a Opção 1 de R$ 500 está disponível com os riscos assumidos em uma conta descartável.
+      </p>
+      <p>
+        Se a meta for construir uma <strong>máquina de vendas séria</strong>, que preserve o patrimônio da Legado, abasteça o SDR diariamente e ainda crie um produto de alto ticket para vender para os clientes da assessoria, a Opção 2 é o caminho profissional e definitivo.
+      </p>
+    </section>
+  </div>
+</body>
+</html>
