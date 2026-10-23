@@ -53,8 +53,23 @@ CREATE TABLE IF NOT EXISTS blacklist (
     added_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 5. Gerenciamento de Contas do Instagram (Scrapers e Senders)
+CREATE TABLE IF NOT EXISTS instagram_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,       -- usuário do Instagram (sem @)
+    password TEXT NOT NULL,              -- senha para autenticação automática
+    role TEXT NOT NULL,                  -- 'scraper' (fantasma) ou 'sender' (aquecida)
+    proxy TEXT,                          -- formato opcional http://user:pass@ip:port
+    daily_limit INTEGER DEFAULT 25,      -- teto de DMs diárias
+    status TEXT DEFAULT 'disconnected',  -- 'disconnected', 'active', 'challenged'
+    last_login_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Índices de Alta Performance
 CREATE INDEX IF NOT EXISTS idx_leads_identifier ON leads(identifier);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
 CREATE INDEX IF NOT EXISTS idx_history_lead ON conversation_history(lead_id);
 CREATE INDEX IF NOT EXISTS idx_logs_sender ON message_logs(sender_account, sent_at);
+CREATE INDEX IF NOT EXISTS idx_accounts_username ON instagram_accounts(username);
+CREATE INDEX IF NOT EXISTS idx_accounts_role ON instagram_accounts(role);

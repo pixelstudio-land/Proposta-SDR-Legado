@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import { chromium } from 'playwright';
 import { settings } from '../../../config/settings.js';
 import db from '../../database/db.js';
 import openaiClient from '../../ai/openai-client.js';
@@ -9,6 +10,7 @@ import qualification from './qualification.js';
 import transbordo from './transbordo.js';
 import { runGmnPipeline } from '../3-miner-gmn/index.js';
 import { runOutboundPipeline } from '../2-outbound-instagram/index.js';
+import waChecker from '../3-miner-gmn/wa-checker.js';
 
 const app = express();
 
@@ -157,6 +159,24 @@ app.post('/api/inbound/webhook', validateWebhookSecret, async (req, res) => {
 // ROTAS DA API DO DASHBOARD WEB LOCAL
 // ==============================================================================
 
+// Buffer de logs em memória para acompanhamento em tempo real
+const runtimeLogs = [];
+export function appendLog(moduleName, message, level = 'info') {
+  const entry = {
+    id: Date.now() + Math.random(),
+    timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    module: moduleName, // 'miner' | 'outbound' | 'system'
+    level,              // 'info' | 'success' | 'warning' | 'error'
+    message: String(message).trim()
+  };
+  runtimeLogs.push(entry);
+  if (runtimeLogs.length > 200) runtimeLogs.shift();
+  return entry;
+}
+
+// Log inicial
+appendLog('system', 'Servidor unificado ativo. Banco de dados SQLite WAL conectado.', 'success');
+
 // Estado em memória das tarefas em background
 let minerTaskState = {
   status: 'idle',
@@ -177,6 +197,23 @@ let outboundTaskState = {
   lastResult: null,
   error: null
 };
+
+/**
+ * GET /api/dashboard/logs
+ * Retorna os logs reais recentes do buffer de memória
+ */
+app.get('/api/dashboard/logs', (req, res) => {
+  try {
+    const { module } = req.query;
+    let logs = runtimeLogs;
+    if (module && module !== 'all') {
+      logs = runtimeLogs.filter(l => l.module === module);
+    }
+    return res.status(200).json({ success: true, count: logs.length, logs });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 /**
  * GET /api/dashboard/stats
@@ -239,6 +276,332 @@ app.get('/api/dashboard/leads/:id/history', (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/accounts
+ * Lista todas as contas do Instagram cadastradas no SQLite e status da sessão
+ */
+app.get('/api/dashboard/accounts', (req, res) => {
+  try {
+    const accounts = db.getAllInstagramAccounts();
+    const mapped = accounts.map(a => {
+      const cleanUser = String(a.username).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const standardSession = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
+      const legacySession = path.join(settings.paths.sessionsDir, `${cleanUser}_storage.json`);
+      const hasSession = fs.existsSync(standardSession) || fs.existsSync(legacySession);
+      const sentToday = db.getDailySentCount(a.username);
+
+      return {
+        id: a.id,
+        username: a.username,
+        role: a.role,
+        proxy: a.proxy,
+        daily_limit: a.daily_limit,
+        status: hasSession ? (a.status === 'challenged' ? 'challenged' : 'active') : 'disconnected',
+        has_session: hasSession,
+        sent_today: sentToday,
+        last_login_at: a.last_login_at
+      };
+    });
+
+    return res.status(200).json({ success: true, count: mapped.length, accounts: mapped });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/accounts
+ * Cadastra uma nova conta do Instagram no SQLite
+ */
+app.post('/api/dashboard/accounts', (req, res) => {
+  try {
+    const { username, password, role, proxy, daily_limit } = req.body;
+    if (!username || !password) {
+      return res.status(400).json({ success: false, error: 'Usuário e senha são obrigatórios.' });
+    }
+
+    const account = db.createInstagramAccount({
+      username,
+      password,
+      role: role === 'sender' ? 'sender' : 'scraper',
+      proxy,
+      daily_limit: parseInt(daily_limit || '25', 10)
+    });
+
+    appendLog('system', `Conta @${account.username} cadastrada como ${account.role}.`, 'info');
+
+    return res.status(201).json({ success: true, account });
+  } catch (err) {
+    return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/dashboard/accounts/:id
+ * Remove uma conta do Instagram do SQLite e apaga sua sessão
+ */
+app.delete('/api/dashboard/accounts/:id', (req, res) => {
+  try {
+    const account = db.getInstagramAccountById(req.params.id);
+    if (!account) {
+      return res.status(404).json({ success: false, error: 'Conta não encontrada.' });
+    }
+
+    // Apaga arquivo de sessão se existir
+    const cleanUser = String(account.username).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const standardSession = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
+    const legacySession = path.join(settings.paths.sessionsDir, `${cleanUser}_storage.json`);
+    if (fs.existsSync(standardSession)) fs.unlinkSync(standardSession);
+    if (fs.existsSync(legacySession)) fs.unlinkSync(legacySession);
+
+    db.deleteInstagramAccount(account.id);
+    appendLog('system', `Conta @${account.username} e sessões removidas.`, 'info');
+
+    return res.status(200).json({ success: true, message: 'Conta removida com sucesso.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/accounts/:id/login
+ * Abre o Playwright em modo VISÍVEL (headless: false) para autenticar a conta e salvar storageState
+ */
+app.post('/api/dashboard/accounts/:id/login', async (req, res) => {
+  const accountId = req.params.id;
+  const account = db.getInstagramAccountById(accountId);
+  if (!account) {
+    return res.status(404).json({ success: false, error: 'Conta não encontrada no banco.' });
+  }
+
+  appendLog('outbound', `Abrindo navegador visível para autenticar @${account.username}...`, 'info');
+
+  let browser = null;
+  try {
+    const launchOptions = {
+      headless: false,
+      args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
+    };
+
+    if (account.proxy) {
+      try {
+        const url = new URL(account.proxy);
+        launchOptions.proxy = {
+          server: `${url.protocol}//${url.host}`,
+          username: url.username || undefined,
+          password: url.password || undefined
+        };
+      } catch {
+        // ignora proxy malformado
+      }
+    }
+
+    browser = await chromium.launch(launchOptions);
+    const context = await browser.newContext({
+      viewport: null,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+    });
+
+    const page = await context.newPage();
+    appendLog('outbound', `Acessando login do Instagram...`, 'info');
+    await page.goto('https://www.instagram.com/accounts/login/', { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+    // Aguarda e preenche credenciais
+    await page.waitForSelector('input[name="username"]', { timeout: 15000 }).catch(() => null);
+
+    const userInput = await page.$('input[name="username"]');
+    if (userInput) {
+      await userInput.click();
+      await page.keyboard.type(account.username, { delay: 90 });
+      await page.waitForTimeout(400);
+
+      const passInput = await page.$('input[name="password"]');
+      if (passInput) {
+        await passInput.click();
+        await page.keyboard.type(account.password, { delay: 90 });
+        await page.waitForTimeout(500);
+
+        const submitBtn = await page.$('button[type="submit"]');
+        if (submitBtn) {
+          await submitBtn.click();
+          appendLog('outbound', `Credenciais enviadas. Aguardando finalização (aprove 2FA se solicitado)...`, 'info');
+        }
+      }
+    }
+
+    // Aguarda até 120s pela confirmação do login
+    const startTime = Date.now();
+    let loggedIn = false;
+
+    while (Date.now() - startTime < 120000) {
+      await page.waitForTimeout(2000);
+
+      const cookies = await context.cookies();
+      const hasSession = cookies.some(c => c.name === 'sessionid' || c.name === 'ds_user_id');
+      const currentUrl = page.url();
+
+      if (hasSession || (!currentUrl.includes('/accounts/login') && !currentUrl.includes('/challenge'))) {
+        loggedIn = true;
+        break;
+      }
+    }
+
+    if (!loggedIn) {
+      throw new Error('Tempo limite de 120s esgotado sem confirmação de login no Instagram.');
+    }
+
+    // Salva storageState
+    const cleanUser = String(account.username).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sessionPath = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
+    await context.storageState({ path: sessionPath });
+
+    // Atualiza status no banco
+    db.updateInstagramAccountStatus(account.id, 'active');
+    appendLog('outbound', `Conta @${account.username} autenticada com sucesso! Sessão salva.`, 'success');
+
+    await browser.close();
+
+    return res.status(200).json({
+      success: true,
+      message: `Conta @${account.username} conectada e autenticada com sucesso!`,
+      sessionPath
+    });
+
+  } catch (err) {
+    if (browser) await browser.close().catch(() => null);
+    appendLog('outbound', `Falha ao autenticar @${account.username}: ${err.message}`, 'error');
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/dashboard/config
+ * Retorna as credenciais e configurações salvas no .env
+ */
+app.get('/api/dashboard/config', (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      config: {
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY ? (process.env.OPENAI_API_KEY.slice(0, 7) + '...' + process.env.OPENAI_API_KEY.slice(-4)) : '',
+        WA_API_URL: process.env.WA_API_URL || settings.integrations.evolutionApi.baseUrl || '',
+        WA_API_KEY: process.env.WA_API_KEY || settings.integrations.evolutionApi.apiKey || '',
+        WA_INSTANCE_NAME: process.env.WA_INSTANCE_NAME || settings.integrations.evolutionApi.instanceName || '',
+        SDR_NOTIFICATION_PHONE: process.env.SDR_NOTIFICATION_PHONE || settings.integrations.whatsapp.sdrNotificationPhone || '',
+        CRM_WEBHOOK_URL: process.env.CRM_WEBHOOK_URL || settings.integrations.crm.webhookUrl || ''
+      }
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/config
+ * Atualiza as variáveis de ambiente no arquivo .env e em memória
+ */
+app.post('/api/dashboard/config', (req, res) => {
+  try {
+    const { OPENAI_API_KEY, WA_API_URL, WA_API_KEY, WA_INSTANCE_NAME, SDR_NOTIFICATION_PHONE, CRM_WEBHOOK_URL } = req.body;
+
+    const envPath = path.resolve('.env');
+    let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+
+    const updateEnvVar = (name, value) => {
+      if (value === undefined || value === null) return;
+      if (name === 'OPENAI_API_KEY' && String(value).includes('...')) return;
+
+      const regex = new RegExp(`^${name}=.*$`, 'm');
+      if (regex.test(envContent)) {
+        envContent = envContent.replace(regex, `${name}=${value}`);
+      } else {
+        envContent += `\n${name}=${value}`;
+      }
+      process.env[name] = value;
+    };
+
+    updateEnvVar('OPENAI_API_KEY', OPENAI_API_KEY);
+    updateEnvVar('WA_API_URL', WA_API_URL);
+    updateEnvVar('WA_API_KEY', WA_API_KEY);
+    updateEnvVar('WA_INSTANCE_NAME', WA_INSTANCE_NAME);
+    updateEnvVar('SDR_NOTIFICATION_PHONE', SDR_NOTIFICATION_PHONE);
+    updateEnvVar('CRM_WEBHOOK_URL', CRM_WEBHOOK_URL);
+
+    fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
+
+    // Atualiza settings em memória
+    if (settings.whatsapp) {
+      if (WA_API_URL) settings.whatsapp.apiUrl = WA_API_URL;
+      if (WA_API_KEY) settings.whatsapp.apiKey = WA_API_KEY;
+      if (WA_INSTANCE_NAME) settings.whatsapp.instanceName = WA_INSTANCE_NAME;
+      if (SDR_NOTIFICATION_PHONE) settings.whatsapp.sdrNotificationPhone = SDR_NOTIFICATION_PHONE;
+    }
+    if (settings.crm && CRM_WEBHOOK_URL) {
+      settings.crm.webhookUrl = CRM_WEBHOOK_URL;
+    }
+    if (settings.ai && OPENAI_API_KEY && !String(OPENAI_API_KEY).includes('...')) {
+      settings.ai.openaiApiKey = OPENAI_API_KEY;
+    }
+
+    appendLog('system', 'Credenciais e integrações (.env) atualizadas.', 'success');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Configurações salvas e aplicadas em memória com sucesso!'
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/validate-leads-wa
+ * Executa a checagem em lote de WhatsApp (waChecker) nos leads ainda não verificados
+ */
+app.post('/api/dashboard/validate-leads-wa', async (req, res) => {
+  try {
+    const unverifiedLeads = db.db.prepare('SELECT id, phone FROM leads WHERE phone IS NOT NULL AND is_whatsapp_active = 0').all();
+
+    if (unverifiedLeads.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'Todos os leads com telefone já estão validados.',
+        checkedCount: 0,
+        activeCount: 0
+      });
+    }
+
+    appendLog('miner', `Validando WhatsApp ativo para ${unverifiedLeads.length} leads pendentes...`, 'info');
+
+    const phoneList = unverifiedLeads.map(l => l.phone);
+    const waResults = await waChecker.validateNumbers(phoneList);
+
+    let activeCount = 0;
+    const updateStmt = db.db.prepare('UPDATE leads SET is_whatsapp_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+
+    for (const lead of unverifiedLeads) {
+      const resItem = waResults.get(lead.phone);
+      if (resItem && resItem.exists) {
+        updateStmt.run(lead.id);
+        activeCount++;
+      }
+    }
+
+    appendLog('miner', `Validação concluída: ${activeCount} novos números de WhatsApp ativos confirmados.`, 'success');
+
+    return res.status(200).json({
+      success: true,
+      message: `Validação concluída: ${activeCount} números ativos confirmados de ${unverifiedLeads.length} testados.`,
+      checkedCount: unverifiedLeads.length,
+      activeCount
+    });
+
+  } catch (err) {
+    appendLog('miner', `Erro na validação de WhatsApp: ${err.message}`, 'error');
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/dashboard/miner
  * Inicia execução real do Módulo 3 (Minerador Google Maps) em background
  */
@@ -264,19 +627,21 @@ app.post('/api/dashboard/miner', async (req, res) => {
       error: null
     };
 
-    // Executa em segundo plano de forma assíncrona sem travar a resposta
+    appendLog('miner', `Iniciando varredura no Google Maps para "${query}" (${limit} alvos)...`, 'info');
+
+    // Executa em segundo plano de forma assíncrona
     runGmnPipeline({ query, limit, fromApi: true })
       .then(result => {
         minerTaskState.status = 'completed';
         minerTaskState.completedAt = new Date().toISOString();
         minerTaskState.lastResult = result;
-        console.log(`🎉 [Dashboard Miner] Concluído: ${result.total} empresas mineradas.`);
+        appendLog('miner', `Mineração concluída! ${result.total} empresas salvas na planilha ${result.file || ''}.`, 'success');
       })
       .catch(err => {
         minerTaskState.status = 'error';
         minerTaskState.completedAt = new Date().toISOString();
         minerTaskState.error = err.message;
-        console.error(`❌ [Dashboard Miner] Erro na execução: ${err.message}`);
+        appendLog('miner', `Falha na mineração: ${err.message}`, 'error');
       });
 
     return res.status(200).json({
@@ -292,7 +657,7 @@ app.post('/api/dashboard/miner', async (req, res) => {
 
 /**
  * POST /api/dashboard/outbound
- * Dispara o fluxo real do Módulo 2 (Outbound Instagram) em background
+ * Trava de Segurança e Disparo real do Módulo 2 (Outbound Instagram)
  */
 app.post('/api/dashboard/outbound', async (req, res) => {
   try {
@@ -300,6 +665,19 @@ app.post('/api/dashboard/outbound', async (req, res) => {
       return res.status(409).json({
         success: false,
         error: 'Um disparo de Outbound Instagram já está em execução no momento.'
+      });
+    }
+
+    // TRAVA DE SEGURANÇA OBRIGATÓRIA: Verifica se há pelo menos 1 scraper e 1 sender no SQLite
+    const accounts = db.getAllInstagramAccounts();
+    const scrapersCount = accounts.filter(a => a.role === 'scraper').length;
+    const sendersCount = accounts.filter(a => a.role === 'sender').length;
+
+    if (scrapersCount === 0 || sendersCount === 0) {
+      appendLog('outbound', 'Disparo bloqueado: Nenhuma conta Scraper ou Sender conectada no sistema.', 'error');
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhuma conta Scraper/Sender conectada. Cadastre e autentique suas contas primeiro.'
       });
     }
 
@@ -316,18 +694,20 @@ app.post('/api/dashboard/outbound', async (req, res) => {
       error: null
     };
 
+    appendLog('outbound', `Iniciando Outbound para @${target || 'leads pendentes'} (${limit} alvos)...`, 'info');
+
     runOutboundPipeline({ target, limit, fromApi: true })
       .then(result => {
         outboundTaskState.status = 'completed';
         outboundTaskState.completedAt = new Date().toISOString();
         outboundTaskState.lastResult = result;
-        console.log(`🎉 [Dashboard Outbound] Concluído para @${target || 'pendentes'}.`);
+        appendLog('outbound', `Outbound concluído com sucesso: ${result.sent} DMs enviadas.`, 'success');
       })
       .catch(err => {
         outboundTaskState.status = 'error';
         outboundTaskState.completedAt = new Date().toISOString();
         outboundTaskState.error = err.message;
-        console.error(`❌ [Dashboard Outbound] Erro na execução: ${err.message}`);
+        appendLog('outbound', `Falha no Outbound: ${err.message}`, 'error');
       });
 
     return res.status(200).json({

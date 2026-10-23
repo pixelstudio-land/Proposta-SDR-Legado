@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let allLeads = [];
   let pollInterval = null;
 
-  // Iconografia SVG Inline Oficial (Lucide Style)
+  // Iconografia SVG Inline Oficial (Lucide Style - Strict Zero Emojis)
   const icons = {
     star: `<svg class="icon-star-gold" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
     landline: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>`,
@@ -22,7 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
     instagram: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg>`,
     message: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>`,
     user: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
-    bot: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M12 8V4H8"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`
+    bot: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M12 8V4H8"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`,
+    trash: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
+    login: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>`
   };
 
   // Elementos do DOM - KPIs
@@ -35,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const valAccounts = document.getElementById('valAccounts');
   const valAccountsDetail = document.getElementById('valAccountsDetail');
   const valSentToday = document.getElementById('valSentToday');
+  const kpiAccountsCard = document.getElementById('kpiAccountsCard');
+  const btnOpenSettings = document.getElementById('btnOpenSettings');
 
   // Elementos do DOM - Minerador
   const formMiner = document.getElementById('formMiner');
@@ -48,6 +52,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const minerFeedback = document.getElementById('minerFeedback');
   const exportsList = document.getElementById('exportsList');
   const btnRefreshExports = document.getElementById('btnRefreshExports');
+  const minerConsoleLines = document.getElementById('minerConsoleLines');
+  const minerConsoleStatus = document.getElementById('minerConsoleStatus');
 
   // Elementos do DOM - Outbound
   const formOutbound = document.getElementById('formOutbound');
@@ -59,6 +65,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const outboundBtnText = document.getElementById('outboundBtnText');
   const outboundStatusTag = document.getElementById('outboundStatusTag');
   const outboundFeedback = document.getElementById('outboundFeedback');
+  const outboundErrorBanner = document.getElementById('outboundErrorBanner');
+  const outboundErrorMessage = document.getElementById('outboundErrorMessage');
+  const btnErrorOpenSettings = document.getElementById('btnErrorOpenSettings');
+  const outboundConsoleLines = document.getElementById('outboundConsoleLines');
+  const outboundConsoleStatus = document.getElementById('outboundConsoleStatus');
 
   // Elementos do DOM - Tabela de Leads & Filtros
   const leadsTableBody = document.getElementById('leadsTableBody');
@@ -68,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterStatus = document.getElementById('filterStatus');
   const btnRefreshAll = document.getElementById('btnRefreshAll');
 
-  // Elementos do DOM - Modal
+  // Elementos do DOM - Modal do Lead
   const leadModal = document.getElementById('leadModal');
   const modalClose = document.getElementById('modalClose');
   const modalBtnClose = document.getElementById('modalBtnClose');
@@ -81,6 +92,41 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalSummary = document.getElementById('modalSummary');
   const modalChatHistory = document.getElementById('modalChatHistory');
 
+  // Elementos do DOM - Modal de Configurações & Conexões
+  const settingsModal = document.getElementById('settingsModal');
+  const settingsModalClose = document.getElementById('settingsModalClose');
+  const settingsModalBtnClose = document.getElementById('settingsModalBtnClose');
+  const btnTabAccounts = document.getElementById('btnTabAccounts');
+  const btnTabApis = document.getElementById('btnTabApis');
+  const tabAccountsContent = document.getElementById('tabAccountsContent');
+  const tabApisContent = document.getElementById('tabApisContent');
+
+  // Aba 1: Contas
+  const formAddAccount = document.getElementById('formAddAccount');
+  const accUsername = document.getElementById('accUsername');
+  const accPassword = document.getElementById('accPassword');
+  const accRole = document.getElementById('accRole');
+  const accLimit = document.getElementById('accLimit');
+  const accProxy = document.getElementById('accProxy');
+  const btnAddAccount = document.getElementById('btnAddAccount');
+  const addAccountFeedback = document.getElementById('addAccountFeedback');
+  const accountsTableBody = document.getElementById('accountsTableBody');
+  const accountsBadgeCount = document.getElementById('accountsBadgeCount');
+  const btnRefreshAccounts = document.getElementById('btnRefreshAccounts');
+
+  // Aba 2: APIs
+  const formApiSettings = document.getElementById('formApiSettings');
+  const cfgOpenAiKey = document.getElementById('cfgOpenAiKey');
+  const cfgWaUrl = document.getElementById('cfgWaUrl');
+  const cfgWaKey = document.getElementById('cfgWaKey');
+  const cfgWaInstance = document.getElementById('cfgWaInstance');
+  const cfgSdrPhone = document.getElementById('cfgSdrPhone');
+  const cfgCrmWebhook = document.getElementById('cfgCrmWebhook');
+  const btnSaveConfig = document.getElementById('btnSaveConfig');
+  const configFeedback = document.getElementById('configFeedback');
+  const btnValidateLeadsWa = document.getElementById('btnValidateLeadsWa');
+  const waValidationFeedback = document.getElementById('waValidationFeedback');
+
   // ============================================================================
   // FUNÇÃO DE FORMATAÇÃO DE TELEFONE (MÁSCARA BRASIL E.164)
   // ============================================================================
@@ -92,16 +138,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (digits.startsWith('55')) {
       const rest = digits.slice(2);
       if (rest.length === 10) {
-        // Fixo: 11 4580-1507 -> (11) 4580-1507
         return `(${rest.slice(0, 2)}) ${rest.slice(2, 6)}-${rest.slice(6)}`;
       }
       if (rest.length === 11) {
-        // Celular: 11 99514-6769 -> (11) 99514-6769
         return `(${rest.slice(0, 2)}) ${rest.slice(2, 7)}-${rest.slice(7)}`;
       }
     }
 
-    // Sem 55
     if (digits.length === 10) {
       return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
     }
@@ -144,6 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.status === 'running') {
       minerStatusTag.className = 'status-pill running';
       minerStatusTag.textContent = 'Em Execução';
+      if (minerConsoleStatus) minerConsoleStatus.textContent = 'RUNNING';
       btnRunMiner.disabled = true;
       minerSpinner.classList.remove('hidden');
       if (minerBtnIcon) minerBtnIcon.classList.add('hidden');
@@ -153,6 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (state.status === 'completed') {
       minerStatusTag.className = 'status-pill completed';
       minerStatusTag.textContent = 'Concluído';
+      if (minerConsoleStatus) minerConsoleStatus.textContent = 'IDLE';
       btnRunMiner.disabled = false;
       minerSpinner.classList.add('hidden');
       if (minerBtnIcon) minerBtnIcon.classList.remove('hidden');
@@ -164,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (state.status === 'error') {
       minerStatusTag.className = 'status-pill error';
       minerStatusTag.textContent = 'Falha';
+      if (minerConsoleStatus) minerConsoleStatus.textContent = 'ERROR';
       btnRunMiner.disabled = false;
       minerSpinner.classList.add('hidden');
       if (minerBtnIcon) minerBtnIcon.classList.remove('hidden');
@@ -173,6 +219,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       minerStatusTag.className = 'status-pill idle';
       minerStatusTag.textContent = 'Pronto';
+      if (minerConsoleStatus) minerConsoleStatus.textContent = 'IDLE';
       btnRunMiner.disabled = false;
       minerSpinner.classList.add('hidden');
       if (minerBtnIcon) minerBtnIcon.classList.remove('hidden');
@@ -184,6 +231,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (state.status === 'running') {
       outboundStatusTag.className = 'status-pill running';
       outboundStatusTag.textContent = 'Disparando';
+      if (outboundConsoleStatus) outboundConsoleStatus.textContent = 'RUNNING';
       btnRunOutbound.disabled = true;
       outboundSpinner.classList.remove('hidden');
       if (outboundBtnIcon) outboundBtnIcon.classList.add('hidden');
@@ -193,6 +241,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (state.status === 'completed') {
       outboundStatusTag.className = 'status-pill completed';
       outboundStatusTag.textContent = 'Concluído';
+      if (outboundConsoleStatus) outboundConsoleStatus.textContent = 'IDLE';
       btnRunOutbound.disabled = false;
       outboundSpinner.classList.add('hidden');
       if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
@@ -202,6 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (state.status === 'error') {
       outboundStatusTag.className = 'status-pill error';
       outboundStatusTag.textContent = 'Falha';
+      if (outboundConsoleStatus) outboundConsoleStatus.textContent = 'ERROR';
       btnRunOutbound.disabled = false;
       outboundSpinner.classList.add('hidden');
       if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
@@ -211,6 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       outboundStatusTag.className = 'status-pill idle';
       outboundStatusTag.textContent = 'Pronto';
+      if (outboundConsoleStatus) outboundConsoleStatus.textContent = 'IDLE';
       btnRunOutbound.disabled = false;
       outboundSpinner.classList.add('hidden');
       if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
@@ -292,7 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // 2. Coluna Empresa / Contato: NÃO repete o telefone embaixo
-      // Extrai nicho ou endereço limpo do ai_summary para a segunda linha
       let subtext = lead.niche || lead.identifier || '';
       if (lead.ai_summary) {
         if (lead.ai_summary.includes('Minerado GMN:')) {
@@ -315,7 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ? `<span class="badge-ui wa-active">${icons.check}<span>Ativo</span></span>`
         : `<span class="badge-ui wa-inactive">Não verificado</span>`;
 
-      // 4. Avaliação Google (Sem estrela duplicada, uma única estrela dourada SVG em linha)
+      // 4. Avaliação Google (Uma única estrela SVG em linha)
       let ratingCell = `<span style="color: var(--text-subtle);">—</span>`;
       if (lead.ai_summary && lead.ai_summary.includes('Avaliação:')) {
         const match = lead.ai_summary.match(/Avaliação:\s*([\d,\.]+)\s*★?(?:\s*\(([\d\.]+)\s*avaliações\))?/i);
@@ -462,7 +512,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
       minerFeedback.textContent = 'Robô em execução em background...';
       minerFeedback.className = 'feedback-text success';
-
       startProgressPolling();
 
     } catch (err) {
@@ -476,19 +525,21 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ============================================================================
-  // 5. SUBMISSÃO DE OUTBOUND INSTAGRAM
+  // 5. SUBMISSÃO DE OUTBOUND COM TRAVA DE SEGURANÇA E BANNER DE ERRO
   // ============================================================================
   formOutbound.addEventListener('submit', async (e) => {
     e.preventDefault();
     const target = outboundTarget.value.trim();
     const limit = outboundLimit.value;
 
-    btnRunOutbound.disabled = true;
-    outboundSpinner.classList.remove('hidden');
-    if (outboundBtnIcon) outboundBtnIcon.classList.add('hidden');
-    outboundBtnText.textContent = 'Iniciando disparo...';
-    outboundFeedback.textContent = 'Disparando robô Outbound...';
+    // Reseta banner de erro e feedback anterior
+    outboundErrorBanner.classList.add('hidden');
+    outboundFeedback.textContent = 'Verificando contas de Instagram cadastradas...';
     outboundFeedback.className = 'feedback-text';
+
+    // Estado temporário de verificação (NUNCA diz que está disparando antes do backend aprovar)
+    btnRunOutbound.disabled = true;
+    outboundBtnText.textContent = 'Validando conexões...';
 
     try {
       const res = await fetch('/api/dashboard/outbound', {
@@ -498,19 +549,36 @@ document.addEventListener('DOMContentLoaded', () => {
       });
       const data = await res.json();
 
+      // Trava de segurança: Se o servidor rejeitar (HTTP 400 ou sem contas)
       if (!res.ok || !data.success) {
-        outboundFeedback.textContent = `Erro: ${data.error || 'Falha ao iniciar Outbound'}`;
+        const errorMsg = data.error || 'Nenhuma conta Scraper/Sender conectada. Cadastre e autentique suas contas primeiro.';
+        
+        // Exibe erro em vermelho vivo e abre banner de alerta
+        outboundFeedback.textContent = errorMsg;
         outboundFeedback.className = 'feedback-text error';
+        outboundErrorMessage.textContent = errorMsg;
+        outboundErrorBanner.classList.remove('hidden');
+
+        // Reseta o botão para o estado pronto (NUNCA mente dizendo que disparou DMs)
         btnRunOutbound.disabled = false;
         outboundSpinner.classList.add('hidden');
         if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
         outboundBtnText.textContent = 'Disparar Outbound com IA';
+        
+        // Registra log local no console
+        appendConsoleLine(outboundConsoleLines, `[BLOQUEIO DE SEGURANÇA] ${errorMsg}`, 'error');
         return;
       }
 
-      outboundFeedback.textContent = 'Robô Outbound ativo em rodízio seguro.';
-      outboundFeedback.className = 'feedback-text success';
+      // Sucesso real: Inicia disparo
+      btnRunOutbound.disabled = true;
+      outboundSpinner.classList.remove('hidden');
+      if (outboundBtnIcon) outboundBtnIcon.classList.add('hidden');
+      outboundBtnText.textContent = 'Disparando DMs...';
+      outboundFeedback.textContent = 'Auditoria e envio em andamento...';
+      outboundFeedback.className = 'feedback-text';
 
+      appendConsoleLine(outboundConsoleLines, `[OUTBOUND INICIADO] Disparando para @${target} (limite ${limit})`, 'info');
       startProgressPolling();
 
     } catch (err) {
@@ -523,9 +591,394 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Ação de clique no banner de erro para conectar contas
+  btnErrorOpenSettings.addEventListener('click', () => {
+    openSettingsModal('accounts');
+  });
+
   // ============================================================================
-  // 6. MODAL DO LEAD (DOSSIÊ CORPORATIVO & CHAT IA)
+  // 6. GERENCIAMENTO DE CONEXÕES & CONTAS INSTAGRAM (MODAL)
   // ============================================================================
+  async function loadAccounts() {
+    try {
+      const res = await fetch('/api/dashboard/accounts');
+      const data = await res.json();
+      if (!data.success) {
+        accountsTableBody.innerHTML = `<tr><td colspan="5" class="table-msg">Erro ao listar contas: ${data.error}</td></tr>`;
+        return;
+      }
+
+      const accounts = data.accounts || [];
+      accountsBadgeCount.textContent = `${accounts.length} ${accounts.length === 1 ? 'conta' : 'contas'}`;
+      renderAccounts(accounts);
+    } catch (err) {
+      console.error('Erro ao carregar contas:', err);
+      accountsTableBody.innerHTML = `<tr><td colspan="5" class="table-msg">Falha na conexão com o banco.</td></tr>`;
+    }
+  }
+
+  function renderAccounts(accounts) {
+    if (accounts.length === 0) {
+      accountsTableBody.innerHTML = `<tr><td colspan="5" class="table-msg">Nenhuma conta cadastrada no SQLite. Adicione uma conta no formulário acima.</td></tr>`;
+      return;
+    }
+
+    accountsTableBody.innerHTML = accounts.map(acc => {
+      const isScraper = acc.role === 'scraper';
+      const roleBadge = isScraper
+        ? `<span class="badge-ui badge-role-scraper">Scraper Fantasma</span>`
+        : `<span class="badge-ui badge-role-sender">Sender Aquecida</span>`;
+
+      let sessionBadge = `<span class="badge-ui session-disconnected">Desconectada</span>`;
+      if (acc.has_session && acc.status === 'active') {
+        sessionBadge = `<span class="badge-ui session-active">${icons.check}<span>Ativa (Cookies)</span></span>`;
+      } else if (acc.status === 'challenged') {
+        sessionBadge = `<span class="badge-ui session-challenged"><span>Desafio 2FA</span></span>`;
+      }
+
+      const proxyText = acc.proxy ? `<span class="font-mono text-subtle" title="${escapeHtml(acc.proxy)}" style="display: block; font-size: 0.7rem;">Proxy configurado</span>` : '';
+
+      return `
+        <tr data-acc-id="${acc.id}">
+          <td>
+            <div style="display: flex; flex-direction: column;">
+              <span class="font-mono" style="font-weight: 600; color: var(--text-primary);">@${escapeHtml(acc.username)}</span>
+              ${proxyText}
+            </div>
+          </td>
+          <td>${roleBadge}</td>
+          <td class="font-mono">${acc.sent_today} / ${acc.daily_limit}</td>
+          <td>${sessionBadge}</td>
+          <td style="text-align: right;">
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+              <button class="btn btn-secondary btn-xs btn-login-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Abrir Chromium visível e fazer login no Instagram">
+                ${icons.login}
+                <span>Autenticar no Navegador</span>
+              </button>
+              <button class="btn-delete-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Remover conta e apagar cookies">
+                ${icons.trash}
+              </button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    // Wire up Login handlers
+    document.querySelectorAll('.btn-login-acc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const username = btn.getAttribute('data-username');
+        handleAccountLogin(id, username, btn);
+      });
+    });
+
+    // Wire up Delete handlers
+    document.querySelectorAll('.btn-delete-acc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const username = btn.getAttribute('data-username');
+        handleAccountDelete(id, username);
+      });
+    });
+  }
+
+  // Formulário de Cadastro de Conta
+  formAddAccount.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = accUsername.value.trim().replace(/^@/, '');
+    const password = accPassword.value.trim();
+    const role = accRole.value;
+    const daily_limit = parseInt(accLimit.value, 10) || 25;
+    const proxy = accProxy.value.trim();
+
+    if (!username || !password) return;
+
+    btnAddAccount.disabled = true;
+    addAccountFeedback.textContent = 'Cadastrando conta no SQLite...';
+    addAccountFeedback.className = 'feedback-text';
+
+    try {
+      const res = await fetch('/api/dashboard/accounts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, role, daily_limit, proxy })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        addAccountFeedback.textContent = `Erro: ${data.error || 'Falha ao cadastrar conta'}`;
+        addAccountFeedback.className = 'feedback-text error';
+        btnAddAccount.disabled = false;
+        return;
+      }
+
+      addAccountFeedback.textContent = 'Conta cadastrada com sucesso! Clique em "Autenticar no Navegador" para salvar os cookies.';
+      addAccountFeedback.className = 'feedback-text success';
+      formAddAccount.reset();
+      accRole.value = role;
+      accLimit.value = 25;
+      btnAddAccount.disabled = false;
+
+      await loadAccounts();
+      await loadStats();
+
+    } catch (err) {
+      addAccountFeedback.textContent = `Falha de conexão: ${err.message}`;
+      addAccountFeedback.className = 'feedback-text error';
+      btnAddAccount.disabled = false;
+    }
+  });
+
+  // Login Interativo Playwright (Modo Visível com preenchimento automático)
+  async function handleAccountLogin(id, username, btn) {
+    const originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span class="btn-spinner"></span><span>Abrindo Chromium...</span>`;
+    addAccountFeedback.textContent = `Chromium aberto para @${username}. Digite ou aprove 2FA se solicitado na janela...`;
+    addAccountFeedback.className = 'feedback-text';
+
+    try {
+      const res = await fetch(`/api/dashboard/accounts/${id}/login`, { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        addAccountFeedback.textContent = `Erro de login: ${data.error || 'Falha ao autenticar'}`;
+        addAccountFeedback.className = 'feedback-text error';
+        btn.disabled = false;
+        btn.innerHTML = originalHtml;
+        await loadAccounts();
+        return;
+      }
+
+      addAccountFeedback.textContent = `Sucesso! Sessão salva para @${username} em data/sessions/${username}.json.`;
+      addAccountFeedback.className = 'feedback-text success';
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+
+      await loadAccounts();
+      await loadStats();
+
+    } catch (err) {
+      addAccountFeedback.textContent = `Erro: ${err.message}`;
+      addAccountFeedback.className = 'feedback-text error';
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+    }
+  }
+
+  // Remoção de Conta
+  async function handleAccountDelete(id, username) {
+    if (!confirm(`Deseja remover a conta @${username}? A sessão de cookies também será excluída.`)) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/dashboard/accounts/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        alert(`Erro ao remover conta: ${data.error}`);
+        return;
+      }
+
+      addAccountFeedback.textContent = `Conta @${username} removida com sucesso.`;
+      addAccountFeedback.className = 'feedback-text';
+      await loadAccounts();
+      await loadStats();
+    } catch (err) {
+      alert(`Erro de conexão: ${err.message}`);
+    }
+  }
+
+  btnRefreshAccounts.addEventListener('click', loadAccounts);
+
+  // ============================================================================
+  // 7. CONFIGURAÇÕES DE APIS & INTEGRAÇÕES (.ENV)
+  // ============================================================================
+  async function loadConfig() {
+    try {
+      const res = await fetch('/api/dashboard/config');
+      const data = await res.json();
+      if (!data.success || !data.config) return;
+
+      const c = data.config;
+      if (c.OPENAI_API_KEY) cfgOpenAiKey.value = c.OPENAI_API_KEY;
+      if (c.WA_API_URL) cfgWaUrl.value = c.WA_API_URL;
+      if (c.WA_API_KEY) cfgWaKey.value = c.WA_API_KEY;
+      if (c.WA_INSTANCE_NAME) cfgWaInstance.value = c.WA_INSTANCE_NAME;
+      if (c.SDR_NOTIFICATION_PHONE) cfgSdrPhone.value = c.SDR_NOTIFICATION_PHONE;
+      if (c.CRM_WEBHOOK_URL) cfgCrmWebhook.value = c.CRM_WEBHOOK_URL;
+    } catch (err) {
+      console.error('Erro ao carregar configurações:', err);
+    }
+  }
+
+  formApiSettings.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btnSaveConfig.disabled = true;
+    configFeedback.textContent = 'Gravando variáveis no arquivo .env...';
+    configFeedback.className = 'feedback-text';
+
+    const payload = {
+      OPENAI_API_KEY: cfgOpenAiKey.value.trim(),
+      WA_API_URL: cfgWaUrl.value.trim(),
+      WA_API_KEY: cfgWaKey.value.trim(),
+      WA_INSTANCE_NAME: cfgWaInstance.value.trim(),
+      SDR_NOTIFICATION_PHONE: cfgSdrPhone.value.trim(),
+      CRM_WEBHOOK_URL: cfgCrmWebhook.value.trim()
+    };
+
+    try {
+      const res = await fetch('/api/dashboard/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        configFeedback.textContent = `Erro ao salvar: ${data.error || 'Falha no servidor'}`;
+        configFeedback.className = 'feedback-text error';
+        btnSaveConfig.disabled = false;
+        return;
+      }
+
+      configFeedback.textContent = 'Configurações salvas no .env e atualizadas em memória com sucesso!';
+      configFeedback.className = 'feedback-text success';
+      btnSaveConfig.disabled = false;
+
+    } catch (err) {
+      configFeedback.textContent = `Erro de conexão: ${err.message}`;
+      configFeedback.className = 'feedback-text error';
+      btnSaveConfig.disabled = false;
+    }
+  });
+
+  // Validação Ativa de WhatsApp dos Leads (wa-checker.js)
+  btnValidateLeadsWa.addEventListener('click', async () => {
+    btnValidateLeadsWa.disabled = true;
+    waValidationFeedback.textContent = 'Consultando a Evolution API para validar os leads não verificados...';
+    waValidationFeedback.className = 'feedback-text';
+
+    try {
+      const res = await fetch('/api/dashboard/validate-leads-wa', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        waValidationFeedback.textContent = `Erro: ${data.error || 'Falha ao validar WhatsApp'}`;
+        waValidationFeedback.className = 'feedback-text error';
+        btnValidateLeadsWa.disabled = false;
+        return;
+      }
+
+      waValidationFeedback.textContent = data.message || 'Leads validados com sucesso!';
+      waValidationFeedback.className = 'feedback-text success';
+      btnValidateLeadsWa.disabled = false;
+
+      await loadLeads();
+      await loadStats();
+
+    } catch (err) {
+      waValidationFeedback.textContent = `Falha de rede: ${err.message}`;
+      waValidationFeedback.className = 'feedback-text error';
+      btnValidateLeadsWa.disabled = false;
+    }
+  });
+
+  // ============================================================================
+  // 8. LOGS EM TEMPO REAL (MINI-CONSOLES)
+  // ============================================================================
+  async function pollLogs() {
+    try {
+      const res = await fetch('/api/dashboard/logs?limit=30');
+      const data = await res.json();
+      if (!data.success || !data.logs) return;
+
+      const logs = data.logs;
+      const minerLogs = logs.filter(l => l.module === 'miner' || l.module === 'system');
+      const outboundLogs = logs.filter(l => l.module === 'outbound' || l.module === 'system');
+
+      if (minerLogs.length > 0 && minerConsoleLines) {
+        renderConsole(minerConsoleLines, minerLogs);
+      }
+      if (outboundLogs.length > 0 && outboundConsoleLines) {
+        renderConsole(outboundConsoleLines, outboundLogs);
+      }
+    } catch (err) {
+      // Falha silenciosa no log polling
+    }
+  }
+
+  function renderConsole(container, logs) {
+    container.innerHTML = logs.map(l => {
+      let cls = 'text-muted';
+      if (l.level === 'error') cls = 'text-error';
+      else if (l.level === 'warn') cls = 'text-warn';
+      else if (l.level === 'success') cls = 'text-success';
+      else if (l.level === 'info') cls = 'text-info';
+
+      const time = new Date(l.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      return `<div class="console-line ${cls}">[${time}] ${escapeHtml(l.message)}</div>`;
+    }).join('');
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function appendConsoleLine(container, message, level = 'info') {
+    if (!container) return;
+    const time = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    let cls = 'text-muted';
+    if (level === 'error') cls = 'text-error';
+    else if (level === 'success') cls = 'text-success';
+    else if (level === 'info') cls = 'text-info';
+
+    const div = document.createElement('div');
+    div.className = `console-line ${cls}`;
+    div.textContent = `[${time}] ${message}`;
+    container.appendChild(div);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  // ============================================================================
+  // 9. NAVEGAÇÃO DE ABAS E CONTROLE DOS MODAIS
+  // ============================================================================
+  function openSettingsModal(defaultTab = 'accounts') {
+    settingsModal.classList.remove('hidden');
+    switchSettingsTab(defaultTab);
+    loadAccounts();
+    loadConfig();
+  }
+
+  function closeSettingsModal() {
+    settingsModal.classList.add('hidden');
+  }
+
+  function switchSettingsTab(tab) {
+    if (tab === 'accounts') {
+      btnTabAccounts.classList.add('active');
+      btnTabApis.classList.remove('active');
+      tabAccountsContent.classList.remove('hidden');
+      tabApisContent.classList.add('hidden');
+    } else {
+      btnTabApis.classList.add('active');
+      btnTabAccounts.classList.remove('active');
+      tabApisContent.classList.remove('hidden');
+      tabAccountsContent.classList.add('hidden');
+    }
+  }
+
+  btnOpenSettings.addEventListener('click', () => openSettingsModal('accounts'));
+  kpiAccountsCard.addEventListener('click', () => openSettingsModal('accounts'));
+  settingsModalClose.addEventListener('click', closeSettingsModal);
+  settingsModalBtnClose.addEventListener('click', closeSettingsModal);
+  btnTabAccounts.addEventListener('click', () => switchSettingsTab('accounts'));
+  btnTabApis.addEventListener('click', () => switchSettingsTab('apis'));
+
+  settingsModal.addEventListener('click', (e) => {
+    if (e.target === settingsModal) closeSettingsModal();
+  });
+
+  // Modal do Lead
   async function openLeadModal(leadId) {
     leadModal.classList.remove('hidden');
     modalCompanyName.textContent = 'Carregando...';
@@ -556,7 +1009,6 @@ document.addEventListener('DOMContentLoaded', () => {
       modalRevenue.textContent = lead.revenue_range || 'Não informado';
       modalSummary.textContent = lead.ai_summary || 'Sem resumo cadastrado';
 
-      // Histórico de Conversa Limpo (Sem Emojis)
       const history = data.history || [];
       if (history.length === 0) {
         modalChatHistory.innerHTML = `
@@ -598,14 +1050,16 @@ document.addEventListener('DOMContentLoaded', () => {
   leadModal.addEventListener('click', (e) => {
     if (e.target === leadModal) closeLeadModal();
   });
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && !leadModal.classList.contains('hidden')) {
-      closeLeadModal();
+    if (e.key === 'Escape') {
+      if (!leadModal.classList.contains('hidden')) closeLeadModal();
+      if (!settingsModal.classList.contains('hidden')) closeSettingsModal();
     }
   });
 
   // ============================================================================
-  // 7. POLLING & ATUALIZAÇÕES PERIÓDICAS
+  // 10. POLLING & ATUALIZAÇÕES PERIÓDICAS
   // ============================================================================
   function startProgressPolling() {
     if (pollInterval) clearInterval(pollInterval);
@@ -613,7 +1067,8 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadStats();
       await loadLeads();
       await loadExports();
-    }, 3000);
+      await pollLogs();
+    }, 2500);
   }
 
   filterSearch.addEventListener('input', renderLeadsTable);
@@ -625,6 +1080,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadStats();
     await loadLeads();
     await loadExports();
+    await pollLogs();
     btnRefreshAll.style.opacity = '1';
   });
 
@@ -640,10 +1096,16 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
-  // Inicialização
+  // Inicialização do Painel
   loadStats();
   loadLeads();
   loadExports();
+  pollLogs();
 
-  setInterval(loadStats, 15000);
+  // Loop de polling de heartbeat (logs e stats a cada 3s)
+  setInterval(() => {
+    loadStats();
+    pollLogs();
+  }, 3000);
 });
+

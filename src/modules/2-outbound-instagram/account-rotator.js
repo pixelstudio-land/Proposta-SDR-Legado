@@ -5,18 +5,60 @@ import db from '../../database/db.js';
 
 class AccountRotator {
   constructor() {
-    this.scraperAccounts = [...settings.outbound.scraperAccounts];
-    this.senderAccounts = [...settings.outbound.senderAccounts];
     this.currentScraperIndex = 0;
     this.currentSenderIndex = 0;
   }
 
   /**
+   * Retorna a lista atualizada de contas Scrapers lendo diretamente do SQLite
+   */
+  getScraperAccounts() {
+    try {
+      const dbAccounts = db.getAllInstagramAccounts().filter(a => a.role === 'scraper' && a.status !== 'challenged');
+      return dbAccounts.map(a => ({
+        id: a.id,
+        username: a.username,
+        password: a.password,
+        proxy: a.proxy,
+        dailyLimit: a.daily_limit,
+        status: a.status
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Retorna a lista atualizada de contas Senders lendo diretamente do SQLite
+   */
+  getSenderAccounts() {
+    try {
+      const dbAccounts = db.getAllInstagramAccounts().filter(a => a.role === 'sender' && a.status !== 'challenged');
+      return dbAccounts.map(a => ({
+        id: a.id,
+        username: a.username,
+        password: a.password,
+        proxy: a.proxy,
+        dailyLimit: a.daily_limit,
+        status: a.status
+      }));
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Retorna o caminho do arquivo de sessão storageState da conta
+   * Suporta {username}.json ou {username}_storage.json
    */
   getSessionFilePath(username) {
     const cleanUser = String(username).replace(/[^a-zA-Z0-9._-]/g, '_');
-    return path.join(settings.paths.sessionsDir, `${cleanUser}_storage.json`);
+    const pathStandard = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
+    const pathLegacy = path.join(settings.paths.sessionsDir, `${cleanUser}_storage.json`);
+
+    if (fs.existsSync(pathStandard)) return pathStandard;
+    if (fs.existsSync(pathLegacy)) return pathLegacy;
+    return pathStandard;
   }
 
   /**
@@ -31,10 +73,10 @@ class AccountRotator {
    * Retorna a próxima conta Scraper ativa (rotação circular simples)
    */
   getNextScraperAccount() {
-    const activeScrapers = this.scraperAccounts.filter(acc => acc.active !== false);
+    const activeScrapers = this.getScraperAccounts();
 
     if (activeScrapers.length === 0) {
-      throw new Error('Nenhuma conta do pool SCRAPER_ACCOUNTS está ativa ou configurada.');
+      throw new Error('Nenhuma conta Scraper cadastrada ou ativa no sistema.');
     }
 
     const account = activeScrapers[this.currentScraperIndex % activeScrapers.length];
@@ -50,10 +92,10 @@ class AccountRotator {
    * Retorna a próxima conta Sender ativa que ainda não atingiu a cota diária
    */
   getNextAvailableSenderAccount() {
-    const activeSenders = this.senderAccounts.filter(acc => acc.active !== false);
+    const activeSenders = this.getSenderAccounts();
 
     if (activeSenders.length === 0) {
-      throw new Error('Nenhuma conta do pool SENDER_ACCOUNTS está ativa ou configurada.');
+      throw new Error('Nenhuma conta Sender cadastrada ou ativa no sistema.');
     }
 
     const maxAttempts = activeSenders.length;
@@ -81,7 +123,7 @@ class AccountRotator {
       }
     }
 
-    throw new Error('Todas as contas do pool SENDER_ACCOUNTS atingiram o limite diário de disparos hoje.');
+    throw new Error('Todas as contas Sender cadastradas atingiram o limite diário de disparos hoje.');
   }
 
   /**
@@ -89,13 +131,13 @@ class AccountRotator {
    */
   markAccountChallenged(accountType, username, reason = 'Challenge detectado') {
     console.error(`🚨 [AccountRotator] Conta ${accountType} @${username} sinalizada com bloqueio/challenge: ${reason}`);
-
-    if (accountType === 'scraper') {
-      const acc = this.scraperAccounts.find(a => a.username === username);
-      if (acc) acc.active = false;
-    } else if (accountType === 'sender') {
-      const acc = this.senderAccounts.find(a => a.username === username);
-      if (acc) acc.active = false;
+    try {
+      const dbAcc = db.getInstagramAccountByUsername(username);
+      if (dbAcc) {
+        db.updateInstagramAccountStatus(dbAcc.id, 'challenged');
+      }
+    } catch (err) {
+      console.warn(`[AccountRotator] Não foi possível atualizar status no SQLite: ${err.message}`);
     }
   }
 }

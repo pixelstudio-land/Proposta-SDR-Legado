@@ -111,6 +111,38 @@ class AppDatabase {
     this.stmtMarkCrmSynced = this.db.prepare(`
       UPDATE leads SET crm_synced = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?
     `);
+
+    // Statements para gerenciamento de contas do Instagram
+    this.stmtGetAllAccounts = this.db.prepare(`
+      SELECT * FROM instagram_accounts ORDER BY id ASC
+    `);
+
+    this.stmtGetAccountById = this.db.prepare(`
+      SELECT * FROM instagram_accounts WHERE id = ?
+    `);
+
+    this.stmtGetAccountByUsername = this.db.prepare(`
+      SELECT * FROM instagram_accounts WHERE username = ?
+    `);
+
+    this.stmtInsertAccount = this.db.prepare(`
+      INSERT INTO instagram_accounts (username, password, role, proxy, daily_limit, status)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    this.stmtUpdateAccountStatus = this.db.prepare(`
+      UPDATE instagram_accounts 
+      SET status = ?, last_login_at = COALESCE(?, last_login_at) 
+      WHERE id = ?
+    `);
+
+    this.stmtDeleteAccount = this.db.prepare(`
+      DELETE FROM instagram_accounts WHERE id = ?
+    `);
+
+    this.stmtCountAccountsByRole = this.db.prepare(`
+      SELECT COUNT(*) as count FROM instagram_accounts WHERE role = ?
+    `);
   }
 
   getLeadByIdentifier(identifier) {
@@ -249,8 +281,10 @@ class AppDatabase {
     const mobileCount = this.db.prepare("SELECT COUNT(*) as count FROM leads WHERE phone_type = 'mobile'").get()?.count || 0;
     const sentToday = this.db.prepare("SELECT COUNT(*) as count FROM message_logs WHERE date(sent_at) = date('now', 'localtime')").get()?.count || 0;
 
-    const scrapersCount = settings.accounts?.scrapers?.length || 0;
-    const sendersCount = settings.accounts?.senders?.length || 0;
+    const dbScrapers = this.stmtCountAccountsByRole.get('scraper')?.count || 0;
+    const dbSenders = this.stmtCountAccountsByRole.get('sender')?.count || 0;
+    const scrapersCount = Number(dbScrapers);
+    const sendersCount = Number(dbSenders);
 
     return {
       totalLeads: Number(totalLeads),
@@ -264,6 +298,59 @@ class AppDatabase {
       sendersCount,
       totalAccounts: scrapersCount + sendersCount
     };
+  }
+
+  getAllInstagramAccounts() {
+    return this.stmtGetAllAccounts.all();
+  }
+
+  getInstagramAccountById(id) {
+    if (!id) return null;
+    return this.stmtGetAccountById.get(Number(id)) || null;
+  }
+
+  getInstagramAccountByUsername(username) {
+    if (!username) return null;
+    const cleanUser = String(username).replace('@', '').trim();
+    return this.stmtGetAccountByUsername.get(cleanUser) || null;
+  }
+
+  createInstagramAccount({ username, password, role = 'scraper', proxy = null, daily_limit = 25 }) {
+    const cleanUser = String(username).replace('@', '').trim();
+    if (!cleanUser || !password) {
+      throw new Error('Usuário e senha são obrigatórios.');
+    }
+
+    const existing = this.getInstagramAccountByUsername(cleanUser);
+    if (existing) {
+      throw new Error(`A conta @${cleanUser} já está cadastrada.`);
+    }
+
+    const result = this.stmtInsertAccount.run(
+      cleanUser,
+      password,
+      role === 'sender' ? 'sender' : 'scraper',
+      proxy ? String(proxy).trim() : null,
+      Number(daily_limit) || 25,
+      'disconnected'
+    );
+
+    return this.getInstagramAccountById(Number(result.lastInsertRowid));
+  }
+
+  updateInstagramAccountStatus(id, status, lastLoginAt = null) {
+    this.stmtUpdateAccountStatus.run(
+      status,
+      lastLoginAt || new Date().toISOString().replace('T', ' ').slice(0, 19),
+      Number(id)
+    );
+    return this.getInstagramAccountById(Number(id));
+  }
+
+  deleteInstagramAccount(id) {
+    if (!id) return false;
+    this.stmtDeleteAccount.run(Number(id));
+    return true;
   }
 
   close() {

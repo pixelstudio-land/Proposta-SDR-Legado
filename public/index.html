@@ -33,6 +33,13 @@
           <span class="status-text">Servidor Ativo</span>
           <span class="status-meta">Porta 3000 &bull; WAL Mode</span>
         </div>
+        <button id="btnOpenSettings" class="btn btn-secondary btn-sm" type="button" title="Conexões e Configurações de API">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
+            <circle cx="12" cy="12" r="3"></circle>
+          </svg>
+          <span>Conexões & Contas</span>
+        </button>
         <button id="btnRefreshAll" class="btn btn-secondary btn-sm" type="button" title="Atualizar dados do servidor">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
@@ -99,7 +106,7 @@
         <div class="kpi-caption">WhatsApp de decisores</div>
       </div>
 
-      <div class="kpi-card">
+      <div class="kpi-card kpi-card-clickable" id="kpiAccountsCard" title="Clique para gerenciar Contas e Conexões">
         <div class="kpi-top">
           <span class="kpi-label">Contas Instagram</span>
           <svg class="kpi-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
@@ -182,6 +189,20 @@
             <div class="empty-placeholder">Carregando planilhas...</div>
           </div>
         </div>
+
+        <!-- Mini-console de logs Módulo 3 -->
+        <div class="console-box" id="minerConsoleWrap">
+          <div class="console-header">
+            <div class="console-title font-mono">
+              <span class="console-dot green"></span>
+              <span>console://miner-gmn</span>
+            </div>
+            <span class="console-status font-mono" id="minerConsoleStatus">IDLE</span>
+          </div>
+          <div class="console-lines font-mono" id="minerConsoleLines">
+            <div class="console-line text-muted">[sistema] Aguardando comando de extração...</div>
+          </div>
+        </div>
       </div>
 
       <!-- Módulo 2: Outbound Instagram Blindado -->
@@ -224,6 +245,21 @@
           </div>
         </form>
 
+        <!-- Banner de erro de travamento seguro -->
+        <div id="outboundErrorBanner" class="alert-banner alert-danger hidden">
+          <div class="alert-icon">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="8" x2="12" y2="12"></line>
+              <line x1="12" y1="16" x2="12.01" y2="16"></line>
+            </svg>
+          </div>
+          <div class="alert-content">
+            <span id="outboundErrorMessage" class="alert-text">Nenhuma conta Scraper/Sender conectada.</span>
+            <button id="btnErrorOpenSettings" class="btn btn-xs btn-danger-action" type="button">Conectar Contas Agora</button>
+          </div>
+        </div>
+
         <!-- Protocolo de Segurança Anti-ban -->
         <div class="security-card">
           <div class="security-title">
@@ -245,6 +281,20 @@
               <span class="security-bullet">&bull;</span>
               <span>Proteção anti-duplicação de 90 dias no SQLite</span>
             </div>
+          </div>
+        </div>
+
+        <!-- Mini-console de logs Módulo 2 -->
+        <div class="console-box" id="outboundConsoleWrap">
+          <div class="console-header">
+            <div class="console-title font-mono">
+              <span class="console-dot blue"></span>
+              <span>console://outbound-instagram</span>
+            </div>
+            <span class="console-status font-mono" id="outboundConsoleStatus">IDLE</span>
+          </div>
+          <div class="console-lines font-mono" id="outboundConsoleLines">
+            <div class="console-line text-muted">[sistema] Aguardando comando de outbound...</div>
           </div>
         </div>
       </div>
@@ -370,6 +420,194 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.0"></script>
+  <!-- Modal de Conexões & Contas (Instagram, APIs e WhatsApp) -->
+  <div id="settingsModal" class="modal-backdrop hidden">
+    <div class="modal-box modal-box-large">
+      <div class="modal-head">
+        <div class="modal-head-titles">
+          <h3 class="modal-title">Conexões &amp; Infraestrutura</h3>
+          <span class="modal-tag font-mono">Contas &bull; Tokens &bull; Evolution API</span>
+        </div>
+        <button id="settingsModalClose" class="modal-btn-close" type="button" aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"></path>
+            <path d="m6 6 12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Abas de Navegação -->
+      <div class="modal-tabs-nav">
+        <button id="btnTabAccounts" class="modal-tab-btn active" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="20" height="20" x="2" y="2" rx="5" ry="5"></rect>
+            <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+            <line x1="17.5" x2="17.51" y1="6.5" y2="6.5"></line>
+          </svg>
+          <span>Contas Instagram (Scrapers &amp; Senders)</span>
+        </button>
+        <button id="btnTabApis" class="modal-tab-btn" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+          </svg>
+          <span>APIs &amp; Integrações (OpenAI, WhatsApp, CRM)</span>
+        </button>
+      </div>
+
+      <div class="modal-content modal-content-tabs">
+        <!-- Aba 1: Contas Instagram -->
+        <div id="tabAccountsContent" class="tab-pane active">
+          <!-- Formulário de Nova Conta -->
+          <form id="formAddAccount" class="settings-form-box">
+            <div class="settings-form-title">
+              <span class="settings-title-tag font-mono">NOVA CONTA</span>
+              <span>Cadastrar Conta de Instagram</span>
+            </div>
+            <div class="settings-grid">
+              <div class="form-field">
+                <label for="accUsername" class="form-label">Usuário (@)</label>
+                <div class="input-with-affix">
+                  <span class="input-affix">@</span>
+                  <input type="text" id="accUsername" class="form-input affix-input" placeholder="usuario_instagram" required>
+                </div>
+              </div>
+              <div class="form-field">
+                <label for="accPassword" class="form-label">Senha</label>
+                <input type="password" id="accPassword" class="form-input" placeholder="••••••••••••" required>
+              </div>
+              <div class="form-field">
+                <label for="accRole" class="form-label">Papel da Conta</label>
+                <select id="accRole" class="form-input">
+                  <option value="scraper">Scraper Fantasma (Raspagem de Perfis)</option>
+                  <option value="sender">Sender Aquecida (Disparo de Cold DMs)</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label for="accLimit" class="form-label">Teto Diário (DMs)</label>
+                <input type="number" id="accLimit" class="form-input font-mono" value="25" min="5" max="50" required>
+              </div>
+              <div class="form-field span-2">
+                <label for="accProxy" class="form-label">Proxy Dedicado (Opcional)</label>
+                <input type="text" id="accProxy" class="form-input font-mono" placeholder="http://usuario:senha@ip:porta">
+              </div>
+            </div>
+            <div class="settings-form-actions">
+              <button type="submit" id="btnAddAccount" class="btn btn-primary-gold btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="12" y1="5" x2="12" y2="19"></line>
+                  <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>Cadastrar Conta</span>
+              </button>
+              <span id="addAccountFeedback" class="feedback-text"></span>
+            </div>
+          </form>
+
+          <!-- Tabela de Contas Cadastradas -->
+          <div class="accounts-list-wrap">
+            <div class="accounts-header">
+              <div class="accounts-title">
+                <span>Contas Conectadas no SQLite</span>
+                <span id="accountsBadgeCount" class="records-pill font-mono">0 contas</span>
+              </div>
+              <button id="btnRefreshAccounts" class="btn-text-action" type="button">Atualizar lista</button>
+            </div>
+            <div class="accounts-table-container">
+              <table class="data-table accounts-table">
+                <thead>
+                  <tr>
+                    <th>Usuário</th>
+                    <th>Papel</th>
+                    <th>Disparos Hoje</th>
+                    <th>Sessão / Cookies</th>
+                    <th style="text-align: right; width: 220px;">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="accountsTableBody">
+                  <tr>
+                    <td colspan="5" class="table-msg">Carregando contas cadastradas...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Aba 2: APIs & Integrações -->
+        <div id="tabApisContent" class="tab-pane hidden">
+          <form id="formApiSettings" class="settings-form-box">
+            <div class="settings-form-title">
+              <span class="settings-title-tag font-mono">ENV</span>
+              <span>Parâmetros de Integração e Inteligência Artificial</span>
+            </div>
+            <div class="settings-grid">
+              <div class="form-field span-2">
+                <label for="cfgOpenAiKey" class="form-label">OpenAI API Key (GPT-4o-mini &amp; GPT-4o)</label>
+                <input type="password" id="cfgOpenAiKey" class="form-input font-mono" placeholder="sk-proj-...">
+                <span class="form-hint">Chave de acesso à API oficial da OpenAI para raciocínio do SDR e triagem de bios.</span>
+              </div>
+              <div class="form-field">
+                <label for="cfgWaUrl" class="form-label">Evolution API — URL</label>
+                <input type="url" id="cfgWaUrl" class="form-input font-mono" placeholder="http://localhost:8080">
+              </div>
+              <div class="form-field">
+                <label for="cfgWaKey" class="form-label">Evolution API — Global API Key</label>
+                <input type="password" id="cfgWaKey" class="form-input font-mono" placeholder="Chave da Evolution">
+              </div>
+              <div class="form-field">
+                <label for="cfgWaInstance" class="form-label">Evolution — Nome da Instância</label>
+                <input type="text" id="cfgWaInstance" class="form-input font-mono" placeholder="legado_sdr">
+              </div>
+              <div class="form-field">
+                <label for="cfgSdrPhone" class="form-label">WhatsApp do Consultor Legado (Notificações)</label>
+                <input type="text" id="cfgSdrPhone" class="form-input font-mono" placeholder="5511999999999">
+              </div>
+              <div class="form-field span-2">
+                <label for="cfgCrmWebhook" class="form-label">CRM Legado — Webhook URL</label>
+                <input type="url" id="cfgCrmWebhook" class="form-input font-mono" placeholder="https://crm.legado.com.br/api/leads/webhook">
+              </div>
+            </div>
+            <div class="settings-form-actions">
+              <button type="submit" id="btnSaveConfig" class="btn btn-primary-gold btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                  <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                  <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+                <span>Salvar Configurações no .env</span>
+              </button>
+              <span id="configFeedback" class="feedback-text"></span>
+            </div>
+          </form>
+
+          <!-- Bloco Validador de WhatsApp -->
+          <div class="settings-form-box" style="margin-top: 16px;">
+            <div class="settings-form-title">
+              <span class="settings-title-tag font-mono">EVOLUTION API</span>
+              <span>Validação Ativa de WhatsApp dos Leads</span>
+            </div>
+            <p class="panel-description" style="margin-bottom: 12px;">
+              Consulta a Evolution API para validar se os números de telefone classificados no banco como "Não verificado" possuem conta ativa no WhatsApp e atualiza a base em tempo real.
+            </p>
+            <div class="settings-form-actions">
+              <button type="button" id="btnValidateLeadsWa" class="btn btn-secondary btn-sm">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                </svg>
+                <span>Validar WhatsApp dos Leads Agora</span>
+              </button>
+              <span id="waValidationFeedback" class="feedback-text"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button id="settingsModalBtnClose" class="btn btn-secondary btn-sm" type="button">Fechar Painel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=2.1"></script>
 </body>
 </html>
