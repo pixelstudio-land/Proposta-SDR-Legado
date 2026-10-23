@@ -40,6 +40,9 @@ class TargetScraper {
 
     if (fs.existsSync(account.sessionFile)) {
       contextOptions.storageState = account.sessionFile;
+      console.log(`🔒 [TargetScraper] Carregando cookies de sessão autenticada: ${account.sessionFile}`);
+    } else {
+      console.warn(`⚠️ [TargetScraper] Sessão não encontrada em ${account.sessionFile}. Autentique @${account.username} no Dashboard.`);
     }
 
     const context = await browser.newContext(contextOptions);
@@ -141,6 +144,7 @@ class TargetScraper {
         }
 
         try {
+          console.log(`🔍 [TargetScraper] Inspecionando perfil ${identifier} (${collectedLeads.length + 1}/${limit})...`);
           await page.goto(`https://www.instagram.com/${username}/`, { waitUntil: 'domcontentloaded', timeout: 20000 });
           await this.sleep(this.randomDelay(1800, 3200));
 
@@ -164,7 +168,7 @@ class TargetScraper {
           });
 
           collectedLeads.push(savedLead);
-          console.log(`✅ [TargetScraper] Salvo no banco: ${identifier} | Privado: ${isPrivate ? 'Sim' : 'Não'}`);
+          console.log(`✅ [TargetScraper] Salvo no banco: ${identifier} (Nome: "${fullName}", Bio: "${bioText ? bioText.slice(0, 45) + '...' : 'Sem bio'}") | Privado: ${isPrivate ? 'Sim' : 'Não'}`);
 
           await this.sleep(this.randomDelay(1000, 2000));
         } catch (err) {

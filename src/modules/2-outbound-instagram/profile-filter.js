@@ -35,6 +35,7 @@ class ProfileFilterEngine {
 
       // 2. Auditoria Cognitiva com GPT-4o-mini
       try {
+        console.log(`🤖 [ProfileFilter] Auditando bio de ${lead.identifier} via GPT-4o-mini: "${bioText.slice(0, 50)}..."`);
         const audit = await openaiClient.auditProfileBio(bioText, username);
 
         if (audit.isCommercialDecisionMaker && audit.confidenceScore >= 60) {

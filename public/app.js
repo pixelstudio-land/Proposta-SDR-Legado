@@ -891,13 +891,13 @@ document.addEventListener('DOMContentLoaded', () => {
   // ============================================================================
   async function pollLogs() {
     try {
-      const res = await fetch('/api/dashboard/logs?limit=30');
+      const res = await fetch('/api/dashboard/logs?limit=50');
       const data = await res.json();
       if (!data.success || !data.logs) return;
 
       const logs = data.logs;
-      const minerLogs = logs.filter(l => l.module === 'miner' || l.module === 'system');
-      const outboundLogs = logs.filter(l => l.module === 'outbound' || l.module === 'system');
+      const minerLogs = logs.filter(l => l.module === 'miner');
+      const outboundLogs = logs.filter(l => l.module === 'outbound');
 
       if (minerLogs.length > 0 && minerConsoleLines) {
         renderConsole(minerConsoleLines, minerLogs);
@@ -918,8 +918,8 @@ document.addEventListener('DOMContentLoaded', () => {
       else if (l.level === 'success') cls = 'text-success';
       else if (l.level === 'info') cls = 'text-info';
 
-      const time = new Date(l.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      return `<div class="console-line ${cls}">[${time}] ${escapeHtml(l.message)}</div>`;
+      const timeStr = l.timestamp || '';
+      return `<div class="console-line ${cls}">[${timeStr}] ${escapeHtml(l.message)}</div>`;
     }).join('');
     container.scrollTop = container.scrollHeight;
   }

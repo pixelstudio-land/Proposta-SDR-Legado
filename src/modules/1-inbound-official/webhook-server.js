@@ -160,19 +160,90 @@ app.post('/api/inbound/webhook', validateWebhookSecret, async (req, res) => {
 // ==============================================================================
 
 // Buffer de logs em memória para acompanhamento em tempo real
+// Buffer de logs em memória para acompanhamento em tempo real
 const runtimeLogs = [];
 export function appendLog(moduleName, message, level = 'info') {
+  const cleanMsg = String(message)
+    .replace(/\x1B\[[0-9;]*[mK]/g, '')
+    .trim();
+
+  if (!cleanMsg) return;
+
   const entry = {
     id: Date.now() + Math.random(),
     timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
     module: moduleName, // 'miner' | 'outbound' | 'system'
-    level,              // 'info' | 'success' | 'warning' | 'error'
-    message: String(message).trim()
+    level,              // 'info' | 'success' | 'warn' | 'error'
+    message: cleanMsg
   };
   runtimeLogs.push(entry);
-  if (runtimeLogs.length > 200) runtimeLogs.shift();
+  if (runtimeLogs.length > 500) runtimeLogs.shift();
   return entry;
 }
+
+// Interceptação global de console para streaming em tempo real nos mini-consoles do Dashboard
+const origConsoleLog = console.log;
+const origConsoleWarn = console.warn;
+const origConsoleError = console.error;
+
+function routeConsoleToLog(level, args) {
+  try {
+    const raw = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
+    if (!raw || raw.startsWith('===') || raw.includes('ExperimentalWarning') || raw.includes('node:internal')) {
+      return;
+    }
+
+    let moduleName = 'system';
+    if (
+      raw.includes('[MapsScraper]') ||
+      raw.includes('[LeadExporter]') ||
+      raw.includes('[WhatsAppChecker]') ||
+      raw.includes('Google Maps') ||
+      raw.includes('Google Meu Negócio') ||
+      raw.includes('MINERAÇÃO') ||
+      raw.includes('Dashboard Miner')
+    ) {
+      moduleName = 'miner';
+    } else if (
+      raw.includes('[TargetScraper]') ||
+      raw.includes('[ProfileFilter]') ||
+      raw.includes('[Messenger]') ||
+      raw.includes('[AccountRotator]') ||
+      raw.includes('Instagram') ||
+      raw.includes('Cold DM') ||
+      raw.includes('Outbound') ||
+      raw.includes('Dashboard Outbound')
+    ) {
+      moduleName = 'outbound';
+    }
+
+    let logLvl = level;
+    if (raw.includes('✅') || raw.includes('🎯') || raw.includes('APROVADO') || raw.includes('sucesso') || raw.includes('Concluído')) {
+      logLvl = 'success';
+    } else if (raw.includes('❌') || raw.includes('🚨') || raw.includes('Falha') || raw.includes('Erro')) {
+      logLvl = 'error';
+    } else if (raw.includes('⚠️') || raw.includes('Descarte') || raw.includes('REPROVADO') || raw.includes('Pulando')) {
+      logLvl = 'warn';
+    }
+
+    appendLog(moduleName, raw, logLvl);
+  } catch (_) {}
+}
+
+console.log = function(...args) {
+  origConsoleLog.apply(console, args);
+  routeConsoleToLog('info', args);
+};
+
+console.warn = function(...args) {
+  origConsoleWarn.apply(console, args);
+  routeConsoleToLog('warn', args);
+};
+
+console.error = function(...args) {
+  origConsoleError.apply(console, args);
+  routeConsoleToLog('error', args);
+};
 
 // Log inicial
 appendLog('system', 'Servidor unificado ativo. Banco de dados SQLite WAL conectado.', 'success');
@@ -204,12 +275,14 @@ let outboundTaskState = {
  */
 app.get('/api/dashboard/logs', (req, res) => {
   try {
-    const { module } = req.query;
+    const { module, limit } = req.query;
     let logs = runtimeLogs;
     if (module && module !== 'all') {
       logs = runtimeLogs.filter(l => l.module === module);
     }
-    return res.status(200).json({ success: true, count: logs.length, logs });
+    const max = parseInt(limit || '60', 10);
+    const sliced = logs.slice(-max);
+    return res.status(200).json({ success: true, count: sliced.length, logs: sliced });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

@@ -40,6 +40,9 @@ class OutboundMessenger {
 
     if (fs.existsSync(senderAccount.sessionFile)) {
       contextOptions.storageState = senderAccount.sessionFile;
+      console.log(`🔒 [Messenger] Carregando cookies de sessão autenticada da conta Sender: ${senderAccount.sessionFile}`);
+    } else {
+      console.warn(`⚠️ [Messenger] Sessão não encontrada em ${senderAccount.sessionFile}. Autentique @${senderAccount.username} no Dashboard.`);
     }
 
     const context = await browser.newContext(contextOptions);
@@ -78,6 +81,7 @@ class OutboundMessenger {
    * Digita o texto caractere por caractere com delay randômico humano (80ms a 200ms)
    */
   async humanType(page, selector, text) {
+    console.log(`⌨️ [Messenger] Digitando Cold DM humanizadamente tecla por tecla (80-200ms)...`);
     await page.click(selector);
     for (const char of text) {
       await page.keyboard.type(char, { delay: this.randomDelay(80, 200) });
