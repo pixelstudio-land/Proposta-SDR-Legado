@@ -1,0 +1,15 @@
+# ==============================================================================
+# LISTA DE PROXIES MÓVEIS / RESIDENCIAIS 4G (OUTBOUND INSTAGRAM BLINDADO)
+# ==============================================================================
+# Insira um proxy por linha no formato padrão:
+# http://usuario:senha@ip:porta
+# ou com protocolo socks5:
+# socks5://usuario:senha@ip:porta
+#
+# Exemplos comentados:
+# http://legado_user:secure_pass123@185.123.45.67:8080
+# http://legado_user:secure_pass123@185.123.45.68:8080
+#
+# Recomendações:
+# - Utilize proxies móveis 4G com rotação por link ou por tempo (5 a 10 minutos).
+# - Contas Senders devem manter IP estável por sessão para não gerar deslogue.

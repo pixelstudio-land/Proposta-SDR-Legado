@@ -1,9 +1,36 @@
-# Ignorar vídeos pesados de referência
+# Dependências
+node_modules/
+package-lock.json
+
+# Variáveis de ambiente sensíveis
+.env
+.env.local
+.env.*.local
+
+# Banco de dados SQLite e arquivos de lock WAL
+config/*.sqlite
+config/*.sqlite-shm
+config/*.sqlite-wal
+
+# Sessões e cookies de contas do Playwright (mantém apenas .gitkeep)
+data/sessions/*.json
+!data/sessions/.gitkeep
+
+# Planilhas exportadas (mantém apenas .gitkeep)
+data/exports/*.xlsx
+!data/exports/.gitkeep
+
+# Arquivos de log e depuração
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Arquivos de mídia e vídeos pesados
 *.mp4
 snapinsta-*.mp4
 
-# Arquivos de sistema e SO
+# Arquivos de sistema
 .DS_Store
 Thumbs.db
 desktop.ini
-*.log
