@@ -4,20 +4,22 @@ import waChecker from './wa-checker.js';
 import leadExporter from './exporter.js';
 import db from '../../database/db.js';
 
+import { fileURLToPath } from 'url';
+import path from 'path';
+
 /**
- * Orquestrador CLI do Módulo 3: Mineração B2B no Google Meu Negócio
+ * Orquestrador do Módulo 3: Mineração B2B no Google Meu Negócio
  * Executa o fluxo: Varredura Google Maps -> Sanitização de Fixos e Móveis -> Validação de WhatsApp Ativo -> Gravação SQLite -> Exportação Excel
  */
-async function runGmnPipeline() {
+export async function runGmnPipeline(options = {}) {
+  const isCli = !options.fromApi;
+  const args = process.argv.slice(2);
+  const queryArg = options.query || args.find(a => a.startsWith('--query='))?.split('=')[1] || 'Clinica Odontologica Campinas SP';
+  const limitArg = options.limit ? parseInt(options.limit, 10) : parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1] || '15', 10);
+
   console.log('================================================================');
   console.log('🗺️ INICIANDO PIPELINE: MÓDULO 3 - MINERADOR GOOGLE MEU NEGÓCIO');
   console.log('================================================================');
-
-  // Argumentos da linha de comando
-  // Exemplo: node src/modules/3-miner-gmn/index.js --query="Clinica Odontologica Campinas" --limit=20
-  const args = process.argv.slice(2);
-  const queryArg = args.find(a => a.startsWith('--query='))?.split('=')[1] || 'Clinica Odontologica Campinas SP';
-  const limitArg = parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1] || '15', 10);
 
   try {
     // 1. Extração no Google Maps
@@ -26,7 +28,7 @@ async function runGmnPipeline() {
 
     if (rawBusinesses.length === 0) {
       console.log('⚠️ Nenhum estabelecimento foi encontrado para o termo especificado.');
-      return;
+      return { success: true, total: 0, file: null };
     }
 
     // 2. Sanitização de Telefones (Classificação de Fixos vs Celulares)
@@ -105,11 +107,29 @@ async function runGmnPipeline() {
     console.log(`📁 Arquivo Gerado: ${exportResult.filePath}`);
     console.log('================================================================');
 
+    return {
+      success: true,
+      total: finalLeadsForExport.length,
+      validPhones: finalLeadsForExport.filter(l => l.phone).length,
+      whatsappActive: finalLeadsForExport.filter(l => l.is_whatsapp_active).length,
+      file: exportResult.fileName,
+      filePath: exportResult.filePath
+    };
+
   } catch (error) {
     console.error(`\n❌ Falha na execução do pipeline do Minerador GMN: ${error.message}`);
+    throw error;
   } finally {
-    db.close();
+    if (isCli) {
+      db.close();
+    }
   }
 }
 
-runGmnPipeline();
+// Execução direta via CLI (npm run miner)
+const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
+if (isDirectRun) {
+  runGmnPipeline({ fromApi: false });
+}
+
+export default runGmnPipeline;

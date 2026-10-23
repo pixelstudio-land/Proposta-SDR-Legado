@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Legado SDR Engine | Painel de Controle Executivo</title>
+  <meta name="description" content="Dashboard operacional do Legado SDR Engine - Inbound IA, Outbound Instagram e Mineração B2B Google Maps.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Top Navigation -->
+  <header class="topbar">
+    <div class="topbar-container">
+      <div class="brand">
+        <div class="brand-logo">
+          <span class="logo-icon">⚡</span>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">LEGADO <span class="accent-gold">SDR ENGINE</span></div>
+          <div class="brand-subtitle">Máquina Comercial de Aquisição 360°</div>
+        </div>
+      </div>
+
+      <div class="topbar-meta">
+        <div class="status-badge online">
+          <span class="pulse-dot"></span>
+          <span class="status-label">Servidor Ativo</span>
+          <span class="status-details">Porta 3000 • WAL Mode</span>
+        </div>
+        <button id="btnRefreshAll" class="btn btn-outline-gold" title="Atualizar dados em tempo real">
+          <span class="btn-icon">🔄</span> Atualizar Painel
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="dashboard-main">
+    <!-- Top KPI Grid -->
+    <section class="kpi-grid">
+      <div class="kpi-card" id="kpiTotalLeads">
+        <div class="kpi-header">
+          <span class="kpi-title">Total de Leads</span>
+          <span class="kpi-icon">🏢</span>
+        </div>
+        <div class="kpi-value" id="valTotalLeads">-</div>
+        <div class="kpi-sub">
+          <span class="badge-sub" id="valNewLeads">0 novos</span>
+          <span class="badge-sub amber" id="valInQualLeads">0 em triagem</span>
+        </div>
+      </div>
+
+      <div class="kpi-card highlight-gold" id="kpiQualified">
+        <div class="kpi-header">
+          <span class="kpi-title">Qualificados (ICP)</span>
+          <span class="kpi-icon">⭐</span>
+        </div>
+        <div class="kpi-value gold" id="valQualifiedLeads">-</div>
+        <div class="kpi-sub">Aprovados para transbordo SDR</div>
+      </div>
+
+      <div class="kpi-card" id="kpiLandline">
+        <div class="kpi-header">
+          <span class="kpi-title">Fixos Comerciais</span>
+          <span class="kpi-icon">📞</span>
+        </div>
+        <div class="kpi-value" id="valLandline">-</div>
+        <div class="kpi-sub">Empresas estruturadas (B2B)</div>
+      </div>
+
+      <div class="kpi-card" id="kpiMobile">
+        <div class="kpi-header">
+          <span class="kpi-title">Celulares Móveis</span>
+          <span class="kpi-icon">📱</span>
+        </div>
+        <div class="kpi-value" id="valMobile">-</div>
+        <div class="kpi-sub">WhatsApp direto de decisores</div>
+      </div>
+
+      <div class="kpi-card" id="kpiAccounts">
+        <div class="kpi-header">
+          <span class="kpi-title">Contas Instagram</span>
+          <span class="kpi-icon">🤖</span>
+        </div>
+        <div class="kpi-value" id="valAccounts">-</div>
+        <div class="kpi-sub" id="valAccountsDetail">0 Scrapers • 0 Senders</div>
+      </div>
+
+      <div class="kpi-card" id="kpiSentToday">
+        <div class="kpi-header">
+          <span class="kpi-title">Disparos Hoje</span>
+          <span class="kpi-icon">🚀</span>
+        </div>
+        <div class="kpi-value cyan" id="valSentToday">-</div>
+        <div class="kpi-sub">DMs Outbound anti-ban</div>
+      </div>
+    </section>
+
+    <!-- Operational Controls Grid -->
+    <section class="controls-grid">
+      <!-- Card A: Minerador Google Maps -->
+      <div class="panel-card panel-miner">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span class="panel-badge gmn">MÓDULO 3</span>
+            <h2 class="panel-title">Minerador B2B Google Maps</h2>
+          </div>
+          <span id="minerStatusTag" class="badge-status idle">Pronto</span>
+        </div>
+        <p class="panel-desc">
+          Varredura automatizada no Google Meu Negócio, higienização para formato E.164 (fixos e móveis) e exportação em Excel.
+        </p>
+
+        <form id="formMiner" class="panel-form">
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="minerQuery">Nicho e Localização de Busca</label>
+              <input type="text" id="minerQuery" placeholder="Ex: Clinica Odontologica Barueri SP" value="Clinica Odontologica Barueri SP" required>
+            </div>
+            <div class="form-group flex-1">
+              <label for="minerLimit">Limite</label>
+              <input type="number" id="minerLimit" value="5" min="1" max="50" required>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="btnRunMiner" class="btn btn-primary-gold">
+              <span class="btn-spinner hidden" id="minerSpinner"></span>
+              <span id="minerBtnText">⚡ Minerar no Google Maps</span>
+            </button>
+            <span class="action-feedback" id="minerFeedback"></span>
+          </div>
+        </form>
+
+        <!-- Lista de Planilhas Disponíveis -->
+        <div class="exports-section">
+          <div class="exports-header">
+            <span class="exports-title">📁 Planilhas Excel Geradas (.xlsx)</span>
+            <button id="btnRefreshExports" class="btn-link" type="button">Atualizar lista</button>
+          </div>
+          <div class="exports-list" id="exportsList">
+            <div class="empty-state">Carregando planilhas...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card B: Outbound Instagram Blindado -->
+      <div class="panel-card panel-outbound">
+        <div class="panel-header">
+          <div class="panel-title-group">
+            <span class="panel-badge insta">MÓDULO 2</span>
+            <h2 class="panel-title">Outbound Instagram Blindado</h2>
+          </div>
+          <span id="outboundStatusTag" class="badge-status idle">Pronto</span>
+        </div>
+        <p class="panel-desc">
+          Extrai seguidores de concorrentes, audita a bio com GPT-4o-mini e dispara Cold DMs em rodízio com digitação humana tecla por tecla.
+        </p>
+
+        <form id="formOutbound" class="panel-form">
+          <div class="form-row">
+            <div class="form-group flex-2">
+              <label for="outboundTarget">Perfil Alvo do Concorrente</label>
+              <div class="input-prefix-wrapper">
+                <span class="input-prefix">@</span>
+                <input type="text" id="outboundTarget" placeholder="usuario_concorrente" value="legadoperformance">
+              </div>
+            </div>
+            <div class="form-group flex-1">
+              <label for="outboundLimit">Qtd Alvos</label>
+              <input type="number" id="outboundLimit" value="10" min="1" max="25">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="submit" id="btnRunOutbound" class="btn btn-primary-blue">
+              <span class="btn-spinner hidden" id="outboundSpinner"></span>
+              <span id="outboundBtnText">🎯 Iniciar Disparo Outbound</span>
+            </button>
+            <span class="action-feedback" id="outboundFeedback"></span>
+          </div>
+        </form>
+
+        <!-- Informações de Segurança Anti-Ban -->
+        <div class="anti-ban-box">
+          <div class="anti-ban-title">🛡️ Protocolo Anti-Ban Ativo:</div>
+          <ul class="anti-ban-list">
+            <li>• Separação estrita: Contas Scrapers não enviam DMs</li>
+            <li>• Teto seguro de 20 a 25 DMs/dia por conta SENDER</li>
+            <li>• Bloqueio anti-duplicação de 90 dias ativo no SQLite</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Leads Table Section -->
+    <section class="leads-section">
+      <div class="leads-header">
+        <div class="leads-title-group">
+          <h2 class="section-title">Base de Leads Cadastrados</h2>
+          <span class="leads-counter" id="tableCounter">0 leads</span>
+        </div>
+
+        <div class="leads-filters">
+          <div class="search-box">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="filterSearch" placeholder="Buscar por empresa, telefone, nicho...">
+          </div>
+
+          <select id="filterSource" class="filter-select">
+            <option value="all">Todas as Origens</option>
+            <option value="miner_gmn">Google Maps (GMN)</option>
+            <option value="outbound_instagram">Instagram Outbound</option>
+            <option value="inbound_official">Inbound ManyChat</option>
+          </select>
+
+          <select id="filterStatus" class="filter-select">
+            <option value="all">Todos os Status</option>
+            <option value="new">Novo (new)</option>
+            <option value="in_qualification">Em Triagem (in_qualification)</option>
+            <option value="qualified">Qualificado (qualified)</option>
+            <option value="disqualified">Desqualificado</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">#</th>
+              <th>Empresa / Contato</th>
+              <th>Telefone & Tipo</th>
+              <th>WhatsApp</th>
+              <th>Avaliação Google</th>
+              <th>Origem</th>
+              <th>Status</th>
+              <th style="text-align: right; width: 140px;">Ações</th>
+            </tr>
+          </thead>
+          <tbody id="leadsTableBody">
+            <tr>
+              <td colspan="8" class="table-loading">Carregando leads do banco relacional...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modal do Lead: Dossiê e Memória Contínua da IA -->
+  <div id="leadModal" class="modal-overlay hidden">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <div class="modal-title-group">
+          <h3 id="modalCompanyName" class="modal-title">Dossiê do Lead</h3>
+          <span id="modalIdentifier" class="modal-subtitle">@identificador</span>
+        </div>
+        <button id="modalClose" class="modal-close" title="Fechar (Esc)">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Resumo Executivo -->
+        <div class="modal-card">
+          <h4 class="modal-card-title">📋 Ficha Cadastral</h4>
+          <div class="meta-grid">
+            <div class="meta-item">
+              <span class="meta-label">Telefone</span>
+              <span class="meta-val" id="modalPhone">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Tipo de Linha</span>
+              <span class="meta-val" id="modalPhoneType">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Nicho / Segmento</span>
+              <span class="meta-val" id="modalNiche">-</span>
+            </div>
+            <div class="meta-item">
+              <span class="meta-label">Faturamento Declarado</span>
+              <span class="meta-val" id="modalRevenue">-</span>
+            </div>
+            <div class="meta-item flex-span-2">
+              <span class="meta-label">Resumo Cognitivo da IA / Endereço</span>
+              <span class="meta-val" id="modalSummary">-</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Memória Contínua da IA (Chat History) -->
+        <div class="modal-card">
+          <div class="chat-header">
+            <h4 class="modal-card-title">🧠 Memória Contínua de Turnos (`conversation_history`)</h4>
+            <span class="chat-sub">Contexto preservado para evitar amnésia entre webhooks</span>
+          </div>
+          <div id="modalChatHistory" class="chat-history-container">
+            <div class="chat-loading">Carregando histórico...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button id="modalBtnClose" class="btn btn-secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

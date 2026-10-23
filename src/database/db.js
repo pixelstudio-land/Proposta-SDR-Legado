@@ -218,6 +218,54 @@ class AppDatabase {
     return this.stmtMarkCrmSynced.run(Number(leadId));
   }
 
+  getAllLeads({ source, status } = {}) {
+    let sql = 'SELECT * FROM leads WHERE 1=1';
+    const params = [];
+    if (source && source !== 'all') {
+      sql += ' AND source = ?';
+      params.push(source);
+    }
+    if (status && status !== 'all') {
+      sql += ' AND status = ?';
+      params.push(status);
+    }
+    sql += ' ORDER BY id DESC';
+    return this.db.prepare(sql).all(...params);
+  }
+
+  getLeadHistory(leadId) {
+    if (!leadId) return [];
+    return this.db.prepare(
+      'SELECT id, role, content, created_at FROM conversation_history WHERE lead_id = ? ORDER BY id ASC'
+    ).all(Number(leadId));
+  }
+
+  getDashboardStats() {
+    const totalLeads = this.db.prepare('SELECT COUNT(*) as count FROM leads').get()?.count || 0;
+    const qualifiedLeads = this.db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'qualified'").get()?.count || 0;
+    const inQualificationCount = this.db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'in_qualification'").get()?.count || 0;
+    const newCount = this.db.prepare("SELECT COUNT(*) as count FROM leads WHERE status = 'new'").get()?.count || 0;
+    const landlineCount = this.db.prepare("SELECT COUNT(*) as count FROM leads WHERE phone_type = 'landline'").get()?.count || 0;
+    const mobileCount = this.db.prepare("SELECT COUNT(*) as count FROM leads WHERE phone_type = 'mobile'").get()?.count || 0;
+    const sentToday = this.db.prepare("SELECT COUNT(*) as count FROM message_logs WHERE date(sent_at) = date('now', 'localtime')").get()?.count || 0;
+
+    const scrapersCount = settings.accounts?.scrapers?.length || 0;
+    const sendersCount = settings.accounts?.senders?.length || 0;
+
+    return {
+      totalLeads: Number(totalLeads),
+      qualifiedLeads: Number(qualifiedLeads),
+      inQualificationCount: Number(inQualificationCount),
+      newCount: Number(newCount),
+      landlineCount: Number(landlineCount),
+      mobileCount: Number(mobileCount),
+      sentToday: Number(sentToday),
+      scrapersCount,
+      sendersCount,
+      totalAccounts: scrapersCount + sendersCount
+    };
+  }
+
   close() {
     this.db.close();
   }
