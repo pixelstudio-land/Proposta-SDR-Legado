@@ -458,7 +458,7 @@
         <!-- Aba 1: Contas Instagram -->
         <div id="tabAccountsContent" class="tab-pane active">
           <!-- Formulário de Nova Conta -->
-          <form id="formAddAccount" class="settings-form-box">
+          <form id="formAddAccount" class="settings-form-box" autocomplete="off">
             <div class="settings-form-title">
               <span class="settings-title-tag font-mono">NOVA CONTA</span>
               <span>Cadastrar Conta de Instagram</span>
@@ -468,12 +468,12 @@
                 <label for="accUsername" class="form-label">Usuário (@)</label>
                 <div class="input-with-affix">
                   <span class="input-affix">@</span>
-                  <input type="text" id="accUsername" class="form-input affix-input" placeholder="usuario_instagram" required>
+                  <input type="text" id="accUsername" class="form-input affix-input" placeholder="usuario_instagram" required autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
                 </div>
               </div>
               <div class="form-field">
                 <label for="accPassword" class="form-label">Senha</label>
-                <input type="password" id="accPassword" class="form-input" placeholder="••••••••••••" required>
+                <input type="password" id="accPassword" class="form-input" placeholder="••••••••••••" required autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
               <div class="form-field">
                 <label for="accRole" class="form-label">Papel da Conta</label>
@@ -488,7 +488,7 @@
               </div>
               <div class="form-field span-2">
                 <label for="accProxy" class="form-label">Proxy Dedicado (Opcional)</label>
-                <input type="text" id="accProxy" class="form-input font-mono" placeholder="http://usuario:senha@ip:porta">
+                <input type="text" id="accProxy" class="form-input font-mono" placeholder="http://usuario:senha@ip:porta" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
             </div>
             <div class="settings-form-actions">
@@ -535,7 +535,7 @@
 
         <!-- Aba 2: APIs & Integrações -->
         <div id="tabApisContent" class="tab-pane hidden">
-          <form id="formApiSettings" class="settings-form-box">
+          <form id="formApiSettings" class="settings-form-box" autocomplete="off">
             <div class="settings-form-title">
               <span class="settings-title-tag font-mono">ENV</span>
               <span>Parâmetros de Integração e Inteligência Artificial</span>
@@ -543,28 +543,28 @@
             <div class="settings-grid">
               <div class="form-field span-2">
                 <label for="cfgOpenAiKey" class="form-label">OpenAI API Key (GPT-4o-mini &amp; GPT-4o)</label>
-                <input type="password" id="cfgOpenAiKey" class="form-input font-mono" placeholder="sk-proj-...">
+                <input type="password" id="cfgOpenAiKey" class="form-input font-mono" placeholder="sk-proj-..." autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
                 <span class="form-hint">Chave de acesso à API oficial da OpenAI para raciocínio do SDR e triagem de bios.</span>
               </div>
               <div class="form-field">
                 <label for="cfgWaUrl" class="form-label">Evolution API — URL</label>
-                <input type="url" id="cfgWaUrl" class="form-input font-mono" placeholder="http://localhost:8080">
+                <input type="url" id="cfgWaUrl" class="form-input font-mono" placeholder="http://localhost:8080" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
               <div class="form-field">
                 <label for="cfgWaKey" class="form-label">Evolution API — Global API Key</label>
-                <input type="password" id="cfgWaKey" class="form-input font-mono" placeholder="Chave da Evolution">
+                <input type="password" id="cfgWaKey" class="form-input font-mono" placeholder="Chave da Evolution" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
               <div class="form-field">
                 <label for="cfgWaInstance" class="form-label">Evolution — Nome da Instância</label>
-                <input type="text" id="cfgWaInstance" class="form-input font-mono" placeholder="legado_sdr">
+                <input type="text" id="cfgWaInstance" class="form-input font-mono" placeholder="legado_sdr" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
               <div class="form-field">
                 <label for="cfgSdrPhone" class="form-label">WhatsApp do Consultor Legado (Notificações)</label>
-                <input type="text" id="cfgSdrPhone" class="form-input font-mono" placeholder="5511999999999">
+                <input type="text" id="cfgSdrPhone" class="form-input font-mono" placeholder="5511999999999" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
               <div class="form-field span-2">
                 <label for="cfgCrmWebhook" class="form-label">CRM Legado — Webhook URL</label>
-                <input type="url" id="cfgCrmWebhook" class="form-input font-mono" placeholder="https://crm.legado.com.br/api/leads/webhook">
+                <input type="url" id="cfgCrmWebhook" class="form-input font-mono" placeholder="https://crm.legado.com.br/api/leads/webhook" autocomplete="new-password" readonly onfocus="this.removeAttribute('readonly');">
               </div>
             </div>
             <div class="settings-form-actions">

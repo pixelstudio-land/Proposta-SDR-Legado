@@ -399,6 +399,17 @@ body {
   background: #18181c;
 }
 
+/* Trava de cor para autofill do Webkit: impede 100% que o Chrome deixe o fundo branco */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px #09090b inset !important;
+  -webkit-text-fill-color: #f4f4f5 !important;
+  caret-color: #f4f4f5;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 .input-with-affix {
   display: flex;
   align-items: center;
@@ -412,14 +423,19 @@ body {
 }
 .input-affix {
   padding-left: 12px;
+  padding-right: 2px;
   color: var(--text-muted);
   font-size: 0.86rem;
   font-family: var(--font-mono);
+  font-weight: 600;
+  flex-shrink: 0;
+  user-select: none;
 }
 .affix-input {
   border: none !important;
   background: transparent !important;
-  padding-left: 6px;
+  padding-left: 8px !important;
+  width: 100%;
 }
 
 .form-footer {
