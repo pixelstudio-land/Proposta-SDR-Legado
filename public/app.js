@@ -135,7 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const modalSummary = document.getElementById('modalSummary');
   const modalChatHistory = document.getElementById('modalChatHistory');
 
-  // Elementos do DOM - Modal de Configurações & Conexões
+  // Modal de Configurações & Conexões
   const settingsModal = document.getElementById('settingsModal');
   const settingsModalClose = document.getElementById('settingsModalClose');
   const settingsModalBtnClose = document.getElementById('settingsModalBtnClose');
@@ -144,8 +144,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const tabAccountsContent = document.getElementById('tabAccountsContent');
   const tabApisContent = document.getElementById('tabApisContent');
 
-  // Aba 1: Contas
+  // Aba 1 - Bloco 1: Conta Principal Oficial
+  const formOfficialSettings = document.getElementById('formOfficialSettings');
+  const cfgOfficialInstagram = document.getElementById('cfgOfficialInstagram');
+  const cfgOfficialAiActive = document.getElementById('cfgOfficialAiActive');
+  const cfgOfficialIcpCriteria = document.getElementById('cfgOfficialIcpCriteria');
+  const btnSaveOfficialConfig = document.getElementById('btnSaveOfficialConfig');
+  const officialConfigFeedback = document.getElementById('officialConfigFeedback');
+  const btnCopyManyChatWebhook = document.getElementById('btnCopyManyChatWebhook');
+  const btnCopyManyChatText = document.getElementById('btnCopyManyChatText');
+
+  // Aba 1 - Bloco 2: Contas Secundárias (Individual & Lote)
+  const btnToggleBatchMode = document.getElementById('btnToggleBatchMode');
+  const btnToggleBatchText = document.getElementById('btnToggleBatchText');
   const formAddAccount = document.getElementById('formAddAccount');
+  const formBatchAccounts = document.getElementById('formBatchAccounts');
   const accUsername = document.getElementById('accUsername');
   const accPassword = document.getElementById('accPassword');
   const accRole = document.getElementById('accRole');
@@ -154,11 +167,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const accSessionCookie = document.getElementById('accSessionCookie');
   const btnAddAccount = document.getElementById('btnAddAccount');
   const addAccountFeedback = document.getElementById('addAccountFeedback');
+  const accBatchInput = document.getElementById('accBatchInput');
+  const btnSubmitBatchAccounts = document.getElementById('btnSubmitBatchAccounts');
+  const batchAccountFeedback = document.getElementById('batchAccountFeedback');
   const accountsTableBody = document.getElementById('accountsTableBody');
   const accountsBadgeCount = document.getElementById('accountsBadgeCount');
   const btnRefreshAccounts = document.getElementById('btnRefreshAccounts');
 
-  // Aba 2: APIs & Parâmetros Operacionais
+  // Aba 2: Mensagens & WhatsApp do Vendedor
+  const btnOpenWaModalFromSettingsBig = document.getElementById('btnOpenWaModalFromSettingsBig');
+  const settingsWaPulseDot = document.getElementById('settingsWaPulseDot');
+  const settingsWaConnectionStatusText = document.getElementById('settingsWaConnectionStatusText');
   const formApiSettings = document.getElementById('formApiSettings');
   const cfgOpenAiKey = document.getElementById('cfgOpenAiKey');
   const cfgSdrPhone = document.getElementById('cfgSdrPhone');
@@ -758,26 +777,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function renderAccounts(accounts) {
     if (accounts.length === 0) {
-      accountsTableBody.innerHTML = `<tr><td colspan="5" class="table-msg">Nenhuma conta cadastrada no SQLite. Adicione uma conta no formulário acima.</td></tr>`;
+      accountsTableBody.innerHTML = `<tr><td colspan="5" class="table-msg">Nenhuma conta secundária cadastrada. Adicione uma conta individual ou importe em lote acima.</td></tr>`;
       return;
     }
 
     accountsTableBody.innerHTML = accounts.map(acc => {
       const isScraper = acc.role === 'scraper';
       const roleBadge = isScraper
-        ? `<span class="badge-ui badge-role-scraper">Scraper Fantasma</span>`
-        : `<span class="badge-ui badge-role-sender">Sender Aquecida</span>`;
+        ? `<span class="badge-ui badge-role-finder">Busca de Perfis</span>`
+        : `<span class="badge-ui badge-role-sender">Disparo de DMs</span>`;
 
-      let sessionBadge = `<span class="badge-ui session-disconnected">Desconectada</span>`;
-      if (acc.has_session && acc.status === 'active') {
-        sessionBadge = `<span class="badge-ui session-active">${icons.check}<span>Ativa (Cookies)</span></span>`;
-      } else if (acc.status === 'challenged') {
-        sessionBadge = `<span class="badge-ui session-challenged"><span>Desafio 2FA</span></span>`;
-      } else if (acc.status === 'needs_auth') {
-        sessionBadge = `<span class="badge-ui session-needs-auth"><span>Requer Cookies</span></span>`;
+      const isReady = acc.has_session && acc.status === 'active';
+      const isRestricted = acc.status === 'challenged';
+
+      let sessionBadge = `<span class="badge-ui session-needs-auth"><span>Pedindo Código / Sessão</span></span>`;
+      if (isReady) {
+        sessionBadge = `<span class="badge-ui session-active">${icons.check}<span>Ativa e Pronta</span></span>`;
+      } else if (isRestricted) {
+        sessionBadge = `<span class="badge-ui session-challenged"><span>Restrita pelo Instagram</span></span>`;
       }
 
-      const proxyText = acc.proxy ? `<span class="font-mono text-subtle" title="${escapeHtml(acc.proxy)}" style="display: block; font-size: 0.7rem;">Proxy configurado</span>` : '';
+      const proxyText = acc.proxy ? `<span class="font-mono text-subtle" title="${escapeHtml(acc.proxy)}" style="display: block; font-size: 0.7rem;">Proxy ativo</span>` : '';
+      const cookieBtnClass = isReady ? 'btn btn-secondary btn-xs btn-cookie-acc' : 'btn btn-primary-gold btn-xs btn-cookie-acc';
+      const cookieBtnText = isReady ? 'Atualizar Sessão' : 'Colar Sessão';
 
       return `
         <tr data-acc-id="${acc.id}">
@@ -788,23 +810,23 @@ document.addEventListener('DOMContentLoaded', () => {
             </div>
           </td>
           <td>${roleBadge}</td>
-          <td class="font-mono">${acc.sent_today} / ${acc.daily_limit}</td>
+          <td class="font-mono">${acc.sent_today} de ${acc.daily_limit || 25}</td>
           <td>${sessionBadge}</td>
           <td style="text-align: right;">
             <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
-              <button class="btn btn-secondary btn-xs btn-cookie-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Colar Cookie sessionid ou JSON do StorageState (ideal para VPS Linux)">
+              <button class="${cookieBtnClass}" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Colar Cookie sessionid ou JSON do StorageState">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                   <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
                   <line x1="12" y1="22.08" x2="12" y2="12"/>
                 </svg>
-                <span>Importar Cookie</span>
+                <span>${cookieBtnText}</span>
               </button>
-              <button class="btn btn-secondary btn-xs btn-login-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Abrir Chromium visível e fazer login no Instagram">
+              <button class="btn btn-secondary btn-xs btn-login-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Abrir Chromium e fazer login">
                 ${icons.login}
                 <span>Navegador</span>
               </button>
-              <button class="btn-delete-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Remover conta e apagar cookies">
+              <button class="btn-delete-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Remover conta">
                 ${icons.trash}
               </button>
             </div>
@@ -847,7 +869,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const username = accUsername ? accUsername.value.trim().replace(/^@/, '') : '';
     const password = accPassword ? accPassword.value.trim() : '';
     const sessionCookie = accSessionCookie ? accSessionCookie.value.trim() : '';
-    const role = accRole ? accRole.value : 'scraper';
+    const role = accRole ? accRole.value : undefined;
     const daily_limit = parseInt(accLimit ? accLimit.value : '25', 10) || 25;
     const proxy = accProxy ? accProxy.value.trim() : '';
 
@@ -900,13 +922,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (addAccountFeedback) {
         const msg = data.sessionSaved
           ? 'Conta cadastrada e ativada imediatamente com cookies!'
-          : 'Conta cadastrada com sucesso! Clique em "Navegador" ou "Importar Cookie" para ativar.';
+          : 'Conta cadastrada com sucesso! Clique em "Colar Sessão" ou "Navegador" para ativar.';
         addAccountFeedback.textContent = msg;
         addAccountFeedback.className = 'feedback-text success';
       }
       formAddAccount.reset();
-      if (accRole) accRole.value = role;
-      if (accLimit) accLimit.value = 25;
       if (btnAddAccount) btnAddAccount.disabled = false;
 
       await loadAccounts();
@@ -918,6 +938,134 @@ document.addEventListener('DOMContentLoaded', () => {
         addAccountFeedback.className = 'feedback-text error';
       }
       if (btnAddAccount) btnAddAccount.disabled = false;
+    }
+  });
+
+  // Alternar entre Cadastro Individual e Em Lote
+  safeListen(btnToggleBatchMode, 'click', () => {
+    if (!formBatchAccounts || !formAddAccount) return;
+    const isBatchHidden = formBatchAccounts.classList.contains('hidden');
+    if (isBatchHidden) {
+      formBatchAccounts.classList.remove('hidden');
+      formAddAccount.classList.add('hidden');
+      if (btnToggleBatchText) btnToggleBatchText.textContent = 'Cadastrar Conta Individual';
+      if (accBatchInput) accBatchInput.focus();
+    } else {
+      formBatchAccounts.classList.add('hidden');
+      formAddAccount.classList.remove('hidden');
+      if (btnToggleBatchText) btnToggleBatchText.textContent = 'Cadastrar Várias em Lote';
+    }
+  });
+
+  // Cadastro de Contas em Lote
+  safeListen(formBatchAccounts, 'submit', async (e) => {
+    e.preventDefault();
+    const rawList = accBatchInput ? accBatchInput.value.trim() : '';
+    if (!rawList) {
+      if (batchAccountFeedback) {
+        batchAccountFeedback.textContent = 'Cole ao menos uma conta na lista (uma por linha).';
+        batchAccountFeedback.className = 'feedback-text error';
+      }
+      return;
+    }
+
+    if (btnSubmitBatchAccounts) btnSubmitBatchAccounts.disabled = true;
+    if (batchAccountFeedback) {
+      batchAccountFeedback.textContent = 'Importando contas e distribuindo funções...';
+      batchAccountFeedback.className = 'feedback-text';
+    }
+
+    try {
+      const res = await fetch('/api/dashboard/accounts/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rawList })
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (batchAccountFeedback) {
+          batchAccountFeedback.textContent = `Erro: ${data.error || 'Falha ao processar lote'}`;
+          batchAccountFeedback.className = 'feedback-text error';
+        }
+        return;
+      }
+
+      if (batchAccountFeedback) {
+        const errMsg = data.errorCount > 0 ? ` (${data.errorCount} ignoradas ou com erro)` : '';
+        batchAccountFeedback.textContent = `${data.createdCount} contas cadastradas com sucesso!${errMsg}`;
+        batchAccountFeedback.className = 'feedback-text success';
+      }
+      if (accBatchInput) accBatchInput.value = '';
+      await loadAccounts();
+      await loadStats();
+
+    } catch (err) {
+      if (batchAccountFeedback) {
+        batchAccountFeedback.textContent = `Erro de conexão: ${err.message}`;
+        batchAccountFeedback.className = 'feedback-text error';
+      }
+    } finally {
+      if (btnSubmitBatchAccounts) btnSubmitBatchAccounts.disabled = false;
+    }
+  });
+
+  // Copiar URL do Webhook do ManyChat para a Conta Oficial
+  safeListen(btnCopyManyChatWebhook, 'click', async () => {
+    const webhookUrl = `${window.location.origin}/api/inbound/webhook`;
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      if (btnCopyManyChatText) btnCopyManyChatText.textContent = 'Link Copiado!';
+      setTimeout(() => {
+        if (btnCopyManyChatText) btnCopyManyChatText.textContent = 'Ver Link de Integração ManyChat';
+      }, 2500);
+    } catch (_) {
+      prompt('Copie a URL do Webhook do ManyChat abaixo:', webhookUrl);
+    }
+  });
+
+  // Salvar Configurações da Conta Principal da Agência
+  safeListen(formOfficialSettings, 'submit', async (e) => {
+    e.preventDefault();
+    if (btnSaveOfficialConfig) btnSaveOfficialConfig.disabled = true;
+    if (officialConfigFeedback) {
+      officialConfigFeedback.textContent = 'Salvando conta principal no SQLite...';
+      officialConfigFeedback.className = 'feedback-text';
+    }
+
+    const payload = {
+      OFFICIAL_INSTAGRAM_USER: cfgOfficialInstagram ? cfgOfficialInstagram.value.trim().replace(/^@/, '') : '',
+      OFFICIAL_AI_ENABLED: cfgOfficialAiActive ? cfgOfficialAiActive.value : '1',
+      OFFICIAL_ICP_CRITERIA: cfgOfficialIcpCriteria ? cfgOfficialIcpCriteria.value.trim() : ''
+    };
+
+    try {
+      const res = await fetch('/api/dashboard/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        if (officialConfigFeedback) {
+          officialConfigFeedback.textContent = `Erro ao salvar: ${data.error || 'Falha no servidor'}`;
+          officialConfigFeedback.className = 'feedback-text error';
+        }
+        return;
+      }
+
+      if (officialConfigFeedback) {
+        officialConfigFeedback.textContent = 'Configurações da conta principal salvas com sucesso!';
+        officialConfigFeedback.className = 'feedback-text success';
+      }
+    } catch (err) {
+      if (officialConfigFeedback) {
+        officialConfigFeedback.textContent = `Erro de conexão: ${err.message}`;
+        officialConfigFeedback.className = 'feedback-text error';
+      }
+    } finally {
+      if (btnSaveOfficialConfig) btnSaveOfficialConfig.disabled = false;
     }
   });
 
@@ -1079,6 +1227,11 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cfgWaMinDelay && c.WHATSAPP_MIN_DELAY) cfgWaMinDelay.value = c.WHATSAPP_MIN_DELAY;
       if (cfgWaMaxDelay && c.WHATSAPP_MAX_DELAY) cfgWaMaxDelay.value = c.WHATSAPP_MAX_DELAY;
       if (cfgWaPitchTemplate && c.WHATSAPP_PITCH_TEMPLATE) cfgWaPitchTemplate.value = c.WHATSAPP_PITCH_TEMPLATE;
+
+      // Configurações da Conta Principal Oficial (Meta / Inbound)
+      if (cfgOfficialInstagram && c.OFFICIAL_INSTAGRAM_USER) cfgOfficialInstagram.value = c.OFFICIAL_INSTAGRAM_USER;
+      if (cfgOfficialAiActive && c.OFFICIAL_AI_ENABLED !== undefined) cfgOfficialAiActive.value = String(c.OFFICIAL_AI_ENABLED);
+      if (cfgOfficialIcpCriteria && c.OFFICIAL_ICP_CRITERIA) cfgOfficialIcpCriteria.value = c.OFFICIAL_ICP_CRITERIA;
     } catch (err) {
       console.error('Erro ao carregar configurações:', err);
     }
@@ -1266,6 +1419,10 @@ document.addEventListener('DOMContentLoaded', () => {
     closeSettingsModal();
     openWhatsAppModal();
   });
+  safeListen(btnOpenWaModalFromSettingsBig, 'click', () => {
+    closeSettingsModal();
+    openWhatsAppModal();
+  });
 
   safeListen(settingsModal, 'click', (e) => {
     if (e.target === settingsModal) closeSettingsModal();
@@ -1385,7 +1542,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!status) return;
     const qr = qrDataUrl || status.qrCode;
 
-    // 1. Atualiza indicador da Topbar
+    // 1. Atualiza indicador da Topbar & Card da Aba de Mensagens
     if (status.connected) {
       if (waPulseDot) {
         waPulseDot.style.backgroundColor = 'var(--emerald)';
@@ -1397,6 +1554,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (waStatusMeta) {
         waStatusMeta.textContent = status.user ? `+${status.user}` : 'Ativo';
+      }
+      if (settingsWaPulseDot) {
+        settingsWaPulseDot.style.backgroundColor = 'var(--emerald)';
+        settingsWaPulseDot.style.boxShadow = '0 0 6px var(--emerald)';
+      }
+      if (settingsWaConnectionStatusText) {
+        settingsWaConnectionStatusText.textContent = status.user
+          ? `Conectado ao número +${status.user}. Alertas e disparos operando normalmente.`
+          : 'Conectado e ativo para envio de alertas e abordagens.';
+        settingsWaConnectionStatusText.style.color = 'var(--emerald)';
       }
     } else if (status.state === 'QR_READY') {
       if (waPulseDot) {
@@ -1410,6 +1577,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (waStatusMeta) {
         waStatusMeta.textContent = 'Aguardando';
       }
+      if (settingsWaPulseDot) {
+        settingsWaPulseDot.style.backgroundColor = 'var(--amber)';
+        settingsWaPulseDot.style.boxShadow = '0 0 6px var(--amber)';
+      }
+      if (settingsWaConnectionStatusText) {
+        settingsWaConnectionStatusText.textContent = 'Aguardando leitura do QR Code no celular. Clique no botão ao lado para escanear.';
+        settingsWaConnectionStatusText.style.color = 'var(--amber)';
+      }
     } else if (status.state === 'CONNECTING') {
       if (waPulseDot) {
         waPulseDot.style.backgroundColor = 'var(--blue)';
@@ -1422,6 +1597,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (waStatusMeta) {
         waStatusMeta.textContent = 'Aguarde';
       }
+      if (settingsWaPulseDot) {
+        settingsWaPulseDot.style.backgroundColor = 'var(--blue)';
+        settingsWaPulseDot.style.boxShadow = '0 0 6px var(--blue)';
+      }
+      if (settingsWaConnectionStatusText) {
+        settingsWaConnectionStatusText.textContent = 'Inicializando socket local Baileys...';
+        settingsWaConnectionStatusText.style.color = 'var(--blue)';
+      }
     } else {
       if (waPulseDot) {
         waPulseDot.style.backgroundColor = 'var(--red)';
@@ -1433,6 +1616,14 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (waStatusMeta) {
         waStatusMeta.textContent = 'Ler QR';
+      }
+      if (settingsWaPulseDot) {
+        settingsWaPulseDot.style.backgroundColor = 'var(--red)';
+        settingsWaPulseDot.style.boxShadow = '0 0 6px var(--red)';
+      }
+      if (settingsWaConnectionStatusText) {
+        settingsWaConnectionStatusText.textContent = 'WhatsApp desconectado. Clique no botão ao lado para ler o QR Code.';
+        settingsWaConnectionStatusText.style.color = 'var(--text-secondary)';
       }
     }
 

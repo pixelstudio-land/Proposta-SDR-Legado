@@ -630,7 +630,7 @@ function saveSessionCookiesForAccount(account, { sessionid, storageState, cookie
 
 /**
  * POST /api/dashboard/accounts
- * Cadastra uma nova conta do Instagram no SQLite (suporta cookie sessionid imediato)
+ * Cadastra uma nova conta secundária do Instagram no SQLite (com papel automático se não informado)
  */
 app.post('/api/dashboard/accounts', (req, res) => {
   try {
@@ -644,12 +644,19 @@ app.post('/api/dashboard/accounts', (req, res) => {
       return res.status(400).json({ success: false, error: 'Informe a senha ou o cookie de sessão para cadastrar a conta.' });
     }
 
+    // Distribuição automática de papel caso não informado
+    let finalRole = role;
+    if (!finalRole || (finalRole !== 'sender' && finalRole !== 'scraper')) {
+      const stats = db.getDashboardStats();
+      finalRole = (stats.scrapersCount <= stats.sendersCount) ? 'scraper' : 'sender';
+    }
+
     const account = db.createInstagramAccount({
       username,
       password: password || '',
-      role: role === 'sender' ? 'sender' : 'scraper',
+      role: finalRole,
       proxy,
-      daily_limit: parseInt(daily_limit || '25', 10)
+      daily_limit: parseInt(daily_limit || '25', 10) || 25
     });
 
     let sessionSaved = false;
@@ -662,11 +669,87 @@ app.post('/api/dashboard/accounts', (req, res) => {
       }
     }
 
-    appendLog('system', `Conta @${account.username} cadastrada como ${account.role}${sessionSaved ? ' com sessão ativa' : ''}.`, 'info');
+    appendLog('system', `Conta secundária @${account.username} cadastrada como ${account.role === 'sender' ? 'Disparador' : 'Localizador'}${sessionSaved ? ' com sessão ativa' : ''}.`, 'info');
 
     return res.status(201).json({ success: true, account, sessionSaved });
   } catch (err) {
     return res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/accounts/batch
+ * Cadastra múltiplas contas secundárias em lote (usuario:senha ou usuario:senha:sessionid, uma por linha)
+ */
+app.post('/api/dashboard/accounts/batch', (req, res) => {
+  try {
+    const { rawList } = req.body || {};
+    if (!rawList || typeof rawList !== 'string') {
+      return res.status(400).json({ success: false, error: 'Lista de contas não informada.' });
+    }
+
+    const lines = rawList.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) {
+      return res.status(400).json({ success: false, error: 'Nenhuma linha válida encontrada na lista.' });
+    }
+
+    const created = [];
+    const errors = [];
+    let stats = db.getDashboardStats();
+    let currentScrapers = stats.scrapersCount;
+    let currentSenders = stats.sendersCount;
+
+    for (const line of lines) {
+      // Formato: usuario:senha ou usuario:senha:sessionid
+      const parts = line.split(':');
+      if (parts.length < 2) {
+        errors.push(`Linha inválida (use usuario:senha): "${line}"`);
+        continue;
+      }
+
+      const cleanUser = parts[0].trim().replace(/^@/, '');
+      const pass = parts[1].trim();
+      const sess = parts[2] ? parts[2].trim() : undefined;
+
+      if (!cleanUser) {
+        errors.push(`Linha sem usuário: "${line}"`);
+        continue;
+      }
+
+      try {
+        const autoRole = (currentScrapers <= currentSenders) ? 'scraper' : 'sender';
+        if (autoRole === 'scraper') currentScrapers++; else currentSenders++;
+
+        const account = db.createInstagramAccount({
+          username: cleanUser,
+          password: pass || '',
+          role: autoRole,
+          daily_limit: 25
+        });
+
+        if (sess) {
+          saveSessionCookiesForAccount(account, { sessionid: sess });
+          account.status = 'active';
+          account.has_session = true;
+        }
+
+        created.push(account);
+      } catch (err) {
+        errors.push(`@${cleanUser}: ${err.message}`);
+      }
+    }
+
+    appendLog('system', `Lote processado: ${created.length} contas adicionadas com sucesso (${errors.length} erros/duplicadas).`, 'info');
+
+    return res.status(200).json({
+      success: true,
+      createdCount: created.length,
+      errorCount: errors.length,
+      created,
+      errors
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -863,6 +946,11 @@ app.get('/api/dashboard/config', (req, res) => {
     const crmUrl = db.getSetting('crm_webhook_url') || process.env.CRM_WEBHOOK_URL || settings.crm.webhookUrl || '';
     const crmKey = db.getSetting('crm_api_key') || process.env.CRM_API_BEARER_TOKEN || settings.crm.bearerToken || '';
 
+    // Parâmetros da Conta Oficial (Meta / Inbound)
+    const officialUser = db.getSetting('official_instagram_user') || 'legadoperformance';
+    const officialAiActive = db.getSetting('official_ai_enabled') !== '0' ? '1' : '0';
+    const officialIcpCriteria = db.getSetting('official_icp_criteria') || 'Faturamento mensal mínimo acima de R$ 30.000/mês em nichos de estética, saúde, clínicas e odontologia.';
+
     return res.status(200).json({
       success: true,
       config: {
@@ -872,7 +960,10 @@ app.get('/api/dashboard/config', (req, res) => {
         CRM_API_KEY: crmKey,
         WHATSAPP_PITCH_TEMPLATE: currentPitch,
         WHATSAPP_MIN_DELAY: currentMinDelay,
-        WHATSAPP_MAX_DELAY: currentMaxDelay
+        WHATSAPP_MAX_DELAY: currentMaxDelay,
+        OFFICIAL_INSTAGRAM_USER: officialUser,
+        OFFICIAL_AI_ENABLED: officialAiActive,
+        OFFICIAL_ICP_CRITERIA: officialIcpCriteria
       }
     });
   } catch (err) {
@@ -893,10 +984,13 @@ app.post('/api/dashboard/config', (req, res) => {
       CRM_API_KEY,
       WHATSAPP_PITCH_TEMPLATE,
       WHATSAPP_MIN_DELAY,
-      WHATSAPP_MAX_DELAY
+      WHATSAPP_MAX_DELAY,
+      OFFICIAL_INSTAGRAM_USER,
+      OFFICIAL_AI_ENABLED,
+      OFFICIAL_ICP_CRITERIA
     } = req.body || {};
 
-    // 1. Grava no SQLite (app_settings)
+    // 1. Grava parâmetros operacionais no SQLite (app_settings)
     if (OPENAI_API_KEY && !String(OPENAI_API_KEY).includes('...')) {
       db.setSetting('openai_api_key', OPENAI_API_KEY.trim());
     }
@@ -917,6 +1011,15 @@ app.post('/api/dashboard/config', (req, res) => {
     }
     if (WHATSAPP_MAX_DELAY !== undefined) {
       db.setSetting('whatsapp_max_delay', parseInt(WHATSAPP_MAX_DELAY, 10));
+    }
+    if (OFFICIAL_INSTAGRAM_USER !== undefined) {
+      db.setSetting('official_instagram_user', String(OFFICIAL_INSTAGRAM_USER).replace(/^@/, '').trim());
+    }
+    if (OFFICIAL_AI_ENABLED !== undefined) {
+      db.setSetting('official_ai_enabled', String(OFFICIAL_AI_ENABLED) === '1' || OFFICIAL_AI_ENABLED === true ? '1' : '0');
+    }
+    if (OFFICIAL_ICP_CRITERIA !== undefined) {
+      db.setSetting('official_icp_criteria', String(OFFICIAL_ICP_CRITERIA).trim());
     }
 
     // 2. Atualiza parâmetros do despachador WhatsApp em tempo de execução
