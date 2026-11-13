@@ -16,6 +16,10 @@ config/*.sqlite-wal
 data/sessions/*.json
 !data/sessions/.gitkeep
 
+# Sessão e autenticação Baileys WhatsApp Nativo
+data/whatsapp-auth/
+data/whatsapp-auth/*
+
 # Planilhas exportadas (mantém apenas .gitkeep)
 data/exports/*.xlsx
 !data/exports/.gitkeep

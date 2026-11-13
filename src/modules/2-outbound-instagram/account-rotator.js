@@ -14,7 +14,7 @@ class AccountRotator {
    */
   getScraperAccounts() {
     try {
-      const dbAccounts = db.getAllInstagramAccounts().filter(a => a.role === 'scraper' && a.status !== 'challenged');
+      const dbAccounts = db.getAllInstagramAccounts().filter(a => a.role === 'scraper' && a.status !== 'challenged' && a.status !== 'needs_auth');
       return dbAccounts.map(a => ({
         id: a.id,
         username: a.username,
@@ -33,7 +33,7 @@ class AccountRotator {
    */
   getSenderAccounts() {
     try {
-      const dbAccounts = db.getAllInstagramAccounts().filter(a => a.role === 'sender' && a.status !== 'challenged');
+      const dbAccounts = db.getAllInstagramAccounts().filter(a => a.role === 'sender' && a.status !== 'challenged' && a.status !== 'needs_auth');
       return dbAccounts.map(a => ({
         id: a.id,
         username: a.username,
@@ -79,13 +79,29 @@ class AccountRotator {
       throw new Error('Nenhuma conta Scraper cadastrada ou ativa no sistema.');
     }
 
-    const account = activeScrapers[this.currentScraperIndex % activeScrapers.length];
-    this.currentScraperIndex++;
+    const maxAttempts = activeScrapers.length;
+    let checked = 0;
 
-    return {
-      ...account,
-      sessionFile: this.getSessionFilePath(account.username)
-    };
+    while (checked < maxAttempts) {
+      const candidate = activeScrapers[this.currentScraperIndex % activeScrapers.length];
+      this.currentScraperIndex++;
+      checked++;
+
+      const sessionFile = this.getSessionFilePath(candidate.username);
+      if (fs.existsSync(sessionFile)) {
+        return {
+          ...candidate,
+          sessionFile
+        };
+      } else {
+        console.warn(`⚠️ [AccountRotator] Scraper @${candidate.username} sem arquivo de sessão. Marcada como 'needs_auth'.`);
+        try {
+          db.updateInstagramAccountStatus(candidate.id, 'needs_auth');
+        } catch (_) {}
+      }
+    }
+
+    throw new Error('Nenhuma conta Scraper possui sessão autenticada válida (todas requerem cookie sessionid).');
   }
 
   /**
@@ -106,6 +122,15 @@ class AccountRotator {
       this.currentSenderIndex++;
       checked++;
 
+      const sessionFile = this.getSessionFilePath(candidate.username);
+      if (!fs.existsSync(sessionFile)) {
+        console.warn(`⚠️ [AccountRotator] Sender @${candidate.username} sem arquivo de sessão. Marcada como 'needs_auth'.`);
+        try {
+          db.updateInstagramAccountStatus(candidate.id, 'needs_auth');
+        } catch (_) {}
+        continue;
+      }
+
       // Consulta no SQLite quantas DMs esta conta já enviou hoje
       const sentToday = db.getDailySentCount(candidate.username);
       const limit = candidate.dailyLimit || settings.outbound.maxDailyDmsPerSender;
@@ -116,14 +141,14 @@ class AccountRotator {
           sentToday,
           dailyLimit: limit,
           remainingDms: limit - sentToday,
-          sessionFile: this.getSessionFilePath(candidate.username)
+          sessionFile
         };
       } else {
         console.warn(`⚠️ [AccountRotator] Conta @${candidate.username} atingiu a cota diária (${sentToday}/${limit} DMs). Rotacionando...`);
       }
     }
 
-    throw new Error('Todas as contas Sender cadastradas atingiram o limite diário de disparos hoje.');
+    throw new Error('Todas as contas Sender cadastradas atingiram o limite diário de disparos hoje ou requerem autenticação.');
   }
 
   /**

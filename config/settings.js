@@ -26,11 +26,8 @@ export const settings = {
     maxTokens: 500
   },
 
-  // Gateway de WhatsApp
+  // Gateway de WhatsApp Nativo Baileys
   whatsapp: {
-    apiUrl: (process.env.WA_API_URL || 'http://localhost:8080').replace(/\/$/, ''),
-    apiKey: process.env.WA_API_KEY || '',
-    instanceName: process.env.WA_INSTANCE_NAME || 'legado_sdr',
     sdrNotificationPhone: (process.env.SDR_NOTIFICATION_PHONE || '').replace(/\D/g, '')
   },
 

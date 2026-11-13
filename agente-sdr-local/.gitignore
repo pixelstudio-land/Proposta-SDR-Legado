@@ -1,0 +1,18 @@
+# Dependências Node.js
+node_modules/
+package-lock.json
+
+# Sessão e Credenciais Privadas do WhatsApp (NUNCA SUBIR)
+auth_info_baileys/
+*.session
+
+# Banco de Dados Local SQLite (Contatos e Leads Privados)
+*.sqlite
+*.sqlite-journal
+*.db
+
+# Logs e arquivos de sistema
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

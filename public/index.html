@@ -33,6 +33,11 @@
           <span class="status-text">Servidor Ativo</span>
           <span class="status-meta">Porta 3000 &bull; WAL Mode</span>
         </div>
+        <div id="btnWaIndicator" class="status-indicator status-indicator-clickable" role="button" tabindex="0" title="WhatsApp Baileys Nativo: Clique para conectar ou ler QR Code">
+          <span class="pulse-dot" id="waPulseDot" style="background-color: var(--amber); box-shadow: 0 0 6px var(--amber);"></span>
+          <span class="status-text" id="waStatusText" style="color: var(--amber);">WhatsApp: Carregando...</span>
+          <span class="status-meta" id="waStatusMeta">QR Code</span>
+        </div>
         <button id="btnOpenSettings" class="btn btn-secondary btn-sm" type="button" title="Conexões e Configurações de API">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
@@ -172,6 +177,45 @@
             <span class="feedback-text" id="minerFeedback"></span>
           </div>
         </form>
+
+        <!-- Fila de Prospecção Automática WhatsApp (Baileys Nativo) -->
+        <div class="wa-dispatcher-card" style="margin-top: 18px; padding: 14px 16px; background: var(--bg-card-subtle); border-radius: var(--radius-md); border: 1px solid var(--border-subtle);">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="module-tag" style="background: rgba(16, 185, 129, 0.15); color: #34d399; border-color: rgba(16, 185, 129, 0.3);">PROSPECÇÃO ATIVA</span>
+              <h3 style="font-size: 13px; font-weight: 600; margin: 0; color: var(--text-primary);">Fila de Disparo WhatsApp (Baileys)</h3>
+            </div>
+            <span id="waDispatcherStatusBadge" class="status-pill idle">Pausada</span>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; line-height: 1.5;">
+            Aborda automaticamente no WhatsApp as empresas mineradas com número validado, usando abordagem B2B consultiva e atraso anti-ban (60s a 120s).
+          </p>
+
+          <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; background: var(--bg-card); padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Pendentes</div>
+              <div id="waDispatcherPendingCount" class="font-mono text-gold" style="font-size: 16px; font-weight: 700; margin-top: 2px;">0</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Hoje</div>
+              <div id="waDispatcherSentToday" class="font-mono" style="font-size: 16px; font-weight: 700; margin-top: 2px; color: var(--emerald);">0</div>
+            </div>
+            <div>
+              <div style="font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Intervalo Seguro</div>
+              <div class="font-mono" style="font-size: 12px; font-weight: 600; margin-top: 5px; color: var(--text-secondary);">60s &ndash; 120s</div>
+            </div>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;">
+            <button id="btnToggleWaDispatcher" type="button" class="btn btn-secondary btn-sm" style="flex: 1; min-width: 170px;">
+              <svg id="waDispatcherIcon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"></polygon>
+              </svg>
+              <span id="waDispatcherBtnText">Ligar Fila de Disparo</span>
+            </button>
+            <span id="waDispatcherFeedback" class="feedback-text" style="font-size: 12px;"></span>
+          </div>
+        </div>
 
         <!-- Lista de Planilhas Disponíveis -->
         <div class="files-container">
@@ -520,7 +564,7 @@
                     <th>Papel</th>
                     <th>Disparos Hoje</th>
                     <th>Sessão / Cookies</th>
-                    <th style="text-align: right; width: 220px;">Ações</th>
+                    <th style="text-align: right; width: 290px;">Ações</th>
                   </tr>
                 </thead>
                 <tbody id="accountsTableBody">
@@ -583,11 +627,11 @@
           <!-- Bloco Validador de WhatsApp -->
           <div class="settings-form-box" style="margin-top: 16px;">
             <div class="settings-form-title">
-              <span class="settings-title-tag font-mono">EVOLUTION API</span>
-              <span>Validação Ativa de WhatsApp dos Leads</span>
+              <span class="settings-title-tag font-mono">BAILEYS NATIVO</span>
+              <span>Validação Ativa de WhatsApp dos Leads (Zero Evolution API)</span>
             </div>
             <p class="panel-description" style="margin-bottom: 12px;">
-              Consulta a Evolution API para validar se os números de telefone classificados no banco como "Não verificado" possuem conta ativa no WhatsApp e atualiza a base em tempo real.
+              Consulta diretamente via socket Baileys se os números de telefone (preservando fixos comerciais de 8 dígitos e celulares de 9 dígitos) possuem conta ativa no WhatsApp e atualiza a base em tempo real.
             </p>
             <div class="settings-form-actions">
               <button type="button" id="btnValidateLeadsWa" class="btn btn-secondary btn-sm">
@@ -608,6 +652,138 @@
     </div>
   </div>
 
-  <script src="app.js?v=2.1"></script>
+  <!-- Modal de Conexão WhatsApp Nativo (Baileys) -->
+  <div id="waModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-box modal-box-md" style="max-width: 460px;">
+      <div class="modal-head">
+        <div class="modal-head-titles">
+          <div class="modal-tag font-mono">BAILEYS NATIVO</div>
+          <h3 class="modal-title">Conexão WhatsApp (Zero Evolution API)</h3>
+        </div>
+        <button id="waModalClose" class="modal-btn-close" type="button" aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"></path>
+            <path d="m6 6 12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-content" style="padding: 24px; text-align: center;">
+        <!-- Status Box -->
+        <div id="waStatusBanner" class="wa-status-box" style="margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+            <span class="pulse-dot" id="waModalPulseDot" style="background-color: var(--amber); box-shadow: 0 0 6px var(--amber);"></span>
+            <span id="waModalStatusTitle" style="font-weight: 600; font-size: 14px;">Aguardando Inicialização...</span>
+          </div>
+          <div id="waModalStatusDesc" style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+            Preparando motor Baileys local...
+          </div>
+        </div>
+
+        <!-- Área Central do QR Code -->
+        <div id="waQrWrapper" class="wa-qr-wrapper" style="margin: 0 auto 20px; width: 280px; height: 280px; display: flex; align-items: center; justify-content: center; background: #ffffff; border-radius: var(--radius-md); box-shadow: 0 4px 20px rgba(0,0,0,0.5); position: relative; overflow: hidden;">
+          <img id="waQrImage" src="" alt="QR Code WhatsApp" style="width: 256px; height: 256px; display: none; object-fit: contain;" />
+          <div id="waQrSpinner" style="display: flex; flex-direction: column; align-items: center; gap: 12px; color: #111;">
+            <div class="spinner" style="border-top-color: #111; border-width: 3px; width: 32px; height: 32px;"></div>
+            <span style="font-size: 13px; font-weight: 600;">Gerando QR Code...</span>
+          </div>
+          <div id="waConnectedNotice" style="display: none; flex-direction: column; align-items: center; gap: 10px; color: #065f46; padding: 20px 10px;">
+            <div style="width: 56px; height: 56px; border-radius: 50%; background: #d1fae5; display: flex; align-items: center; justify-content: center;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+            <span style="font-weight: 700; font-size: 16px; color: #065f46;">WhatsApp Conectado!</span>
+            <span id="waConnectedPhoneDisplay" class="font-mono" style="font-size: 14px; font-weight: 600; color: #047857;"></span>
+            <span style="font-size: 12px; color: #059669; max-width: 240px;">Alertas do SDR e validações de leads ativos.</span>
+          </div>
+        </div>
+
+        <!-- Instruções -->
+        <div id="waInstructions" style="text-align: left; background: var(--bg-card-subtle); padding: 12px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 20px; font-size: 12px;">
+          <p style="font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">Instruções para conexão:</p>
+          <ol style="margin-left: 18px; color: var(--text-secondary); line-height: 1.6;">
+            <li>Abra o <strong>WhatsApp</strong> no celular comercial</li>
+            <li>Toque em <strong>Aparelhos conectados</strong> &gt; <strong>Conectar aparelho</strong></li>
+            <li>Aponte a câmera para o QR Code acima</li>
+          </ol>
+        </div>
+
+        <!-- Ações do Modal -->
+        <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+          <button id="btnWaRefreshQr" type="button" class="btn btn-secondary btn-sm" title="Regerar QR Code ou reconectar">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+            </svg>
+            <span>Regerar QR / Reconectar</span>
+          </button>
+          <button id="btnWaDisconnectSession" type="button" class="btn btn-secondary btn-sm" style="color: var(--red); border-color: var(--red-border);" title="Desconectar e limpar sessão">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+            </svg>
+            <span>Desconectar Sessão</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal de Importação de Cookies / SessionID (VPS & Anti-Headless) -->
+  <div id="sessionCookieModal" class="modal-backdrop hidden" role="dialog" aria-modal="true">
+    <div class="modal-box modal-box-md" style="max-width: 520px;">
+      <div class="modal-head">
+        <div class="modal-head-titles">
+          <div class="modal-tag font-mono">SESSÃO HEADLESS / VPS</div>
+          <h3 class="modal-title">Importar Cookies de Sessão</h3>
+          <span id="sessionModalUsername" class="modal-tag font-mono text-gold" style="margin-top: 4px; display: inline-block;">@usuario</span>
+        </div>
+        <button id="sessionCookieModalClose" class="modal-btn-close" type="button" aria-label="Fechar">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 6 6 18"></path>
+            <path d="m6 6 12 12"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="modal-content" style="padding: 20px;">
+        <p class="panel-description" style="margin-bottom: 14px; font-size: 13px;">
+          Permite autenticar a conta sem abrir navegador gráfico (essencial para servidores VPS Linux e proteção anti-bloqueio).
+        </p>
+
+        <div style="background: var(--bg-card-subtle); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); margin-bottom: 14px; font-size: 12px; color: var(--text-secondary);">
+          <strong style="color: var(--text-primary); display: block; margin-bottom: 4px;">Como obter o cookie:</strong>
+          1. No Chrome/Firefox com a conta logada no Instagram, abra <kbd>F12</kbd> (DevTools).<br>
+          2. Vá em <em>Application</em> &gt; <em>Cookies</em> &gt; <code>https://www.instagram.com</code>.<br>
+          3. Copie o valor do cookie <code>sessionid</code> (ou o JSON completo exportado por extensões) e cole abaixo:
+        </div>
+
+        <form id="formSessionCookie" autocomplete="off">
+          <input type="hidden" id="sessionModalAccountId" value="">
+          <div class="form-field" style="margin-bottom: 14px;">
+            <label for="sessionCookieInput" class="form-label">Cookie sessionid ou JSON StorageState</label>
+            <textarea id="sessionCookieInput" class="form-input font-mono" rows="4" placeholder="Cole o valor do sessionid (ex: 683921...%3A...) ou o JSON com array de cookies" required style="resize: vertical; font-size: 12px;"></textarea>
+          </div>
+
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+            <button type="submit" id="btnSaveSessionCookie" class="btn btn-primary-gold btn-sm">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                <polyline points="7 3 7 8 15 8"></polyline>
+              </svg>
+              <span>Salvar Sessão</span>
+            </button>
+            <span id="sessionCookieFeedback" class="feedback-text"></span>
+          </div>
+        </form>
+      </div>
+
+      <div class="modal-foot">
+        <button id="sessionCookieModalBtnCancel" class="btn btn-secondary btn-sm" type="button">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js?v=2.2"></script>
 </body>
 </html>

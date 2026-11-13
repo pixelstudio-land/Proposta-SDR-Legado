@@ -87,6 +87,23 @@ export async function runGmnPipeline(options = {}) {
         ai_summary: `Minerado GMN: ${item.address || 'Sem endereço'} | Avaliação: ${ratingSummary} | Site: ${item.website || 'Sem site'}`
       });
 
+      // Se a empresa possui perfil no Instagram, injeta automaticamente como alvo do Outbound
+      if (item.instagramUsername) {
+        db.createOrUpdateLead({
+          source: 'outbound_instagram',
+          identifier: item.instagramUsername,
+          name: item.companyName,
+          company_name: item.companyName,
+          phone,
+          phone_type: item.phoneType,
+          is_whatsapp_active: isWhatsappActive ? 1 : 0,
+          niche: queryArg,
+          status: 'new', // Pronto para triagem cognitiva e abordagem no Módulo 2
+          ai_summary: `Alvo extraído via Google Maps (${item.companyName}): Instagram ${item.instagramUsername} | Fone: ${phone || 'S/N'}`
+        });
+        console.log(`📸 [Minerador] Instagram ${item.instagramUsername} (${item.companyName}) injetado na fila do Outbound!`);
+      }
+
       finalLeadsForExport.push({
         ...savedLead,
         address: item.address,

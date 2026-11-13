@@ -52,29 +52,34 @@ class OutboundMessenger {
   }
 
   /**
-   * Garante autenticação da conta Sender salvando storageState
+   * Garante autenticação da conta Sender
+   * BLINDAGEM: Não tenta login com digitação de senha em modo headless.
+   * Se a sessão não existir ou tiver expirado, pausa a conta com status 'needs_auth'.
    */
   async ensureAuthenticated(page, context, senderAccount) {
+    if (!fs.existsSync(senderAccount.sessionFile)) {
+      console.error(`🚨 [Messenger] Conta @${senderAccount.username} não possui sessão salva em disco (${senderAccount.sessionFile}).`);
+      try {
+        db.updateInstagramAccountStatus(senderAccount.id, 'needs_auth');
+      } catch (_) {}
+      throw new Error(`Conta @${senderAccount.username} requer autenticação (status 'needs_auth'). Importe o cookie sessionid no painel web.`);
+    }
+
     await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await this.sleep(this.randomDelay(2000, 3500));
 
+    const currentUrl = page.url();
     const loginInput = await page.$('input[name="username"]');
-    if (loginInput) {
-      console.log(`🔑 [Messenger] Efetuando login da conta Sender @${senderAccount.username}...`);
-      await page.fill('input[name="username"]', senderAccount.username);
-      await this.sleep(this.randomDelay(500, 1000));
-      await page.fill('input[name="password"]', senderAccount.password);
-      await this.sleep(this.randomDelay(800, 1500));
 
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 }).catch(() => {}),
-        page.click('button[type="submit"]')
-      ]);
-
-      await this.sleep(this.randomDelay(3000, 5000));
-      await context.storageState({ path: senderAccount.sessionFile });
-      console.log(`💾 [Messenger] Sessão da conta Sender salva: ${senderAccount.sessionFile}`);
+    if (loginInput || currentUrl.includes('/accounts/login') || currentUrl.includes('/challenge')) {
+      console.error(`🚨 [Messenger] Sessão de @${senderAccount.username} expirou ou foi invalidada.`);
+      try {
+        db.updateInstagramAccountStatus(senderAccount.id, 'needs_auth');
+      } catch (_) {}
+      throw new Error(`Sessão da conta @${senderAccount.username} expirou (status 'needs_auth'). Importe um novo cookie sessionid no painel web.`);
     }
+
+    console.log(`✅ [Messenger] Sessão autenticada validada para @${senderAccount.username}.`);
   }
 
   /**

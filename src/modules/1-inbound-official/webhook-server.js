@@ -11,6 +11,13 @@ import transbordo from './transbordo.js';
 import { runGmnPipeline } from '../3-miner-gmn/index.js';
 import { runOutboundPipeline } from '../2-outbound-instagram/index.js';
 import waChecker from '../3-miner-gmn/wa-checker.js';
+import whatsappClient, {
+  initNativeWhatsApp,
+  getNativeStatus,
+  getNativeQrCode,
+  disconnectNativeWhatsApp
+} from '../../integrations/whatsapp-client.js';
+import whatsappDispatcher from '../3-miner-gmn/whatsapp-dispatcher.js';
 
 const app = express();
 
@@ -70,16 +77,35 @@ app.post('/api/inbound/webhook', validateWebhookSecret, async (req, res) => {
 
   try {
     // 1. Extração flexível dos dados enviados pelo ManyChat
-    const rawIdentifier = body.instagram_username || body.ig_username || body.user_id || body.subscriber_id || body.phone;
-    const userMessage = body.message || body.last_input_text || body.text || body.content || '';
-    const userName = body.name || [body.first_name, body.last_name].filter(Boolean).join(' ') || null;
-    const userPhone = body.phone || null;
+    const rawIdentifier = body.instagram_username || body.ig_username || body.user_id || body.subscriber_id || body.phone || body.contact?.handle || body.contact?.id || body.contact?.username;
+    let userMessage = body.message || body.last_input_text || body.text || body.content || '';
+    const userName = body.name || [body.first_name, body.last_name].filter(Boolean).join(' ') || body.contact?.name || null;
+    const userPhone = body.phone || body.contact?.phone || null;
 
     if (!rawIdentifier) {
       return res.status(400).json({
         success: false,
         error: 'Identificador do usuário ausente no payload (necessário instagram_username, user_id ou phone).'
       });
+    }
+
+    // Detecção e suporte a Gatilhos de Primeira Interação (Stories, Reels e Comentários)
+    const isStoryTrigger = body.event === 'story_reply' || body.event === 'story_reaction' || 
+      body.trigger === 'story_reaction' || body.story_reply || Boolean(body.reaction);
+
+    const isCommentTrigger = body.event === 'comment' || body.event === 'post_comment' || 
+      body.event === 'reel_comment' || body.trigger === 'comment' || Boolean(body.comment) || Boolean(body.comment_text);
+
+    if (isStoryTrigger) {
+      const emoji = body.reaction || body.story_reply || '🔥';
+      const storyContext = `[Reagiu ao seu Story no Instagram com ${emoji}]`;
+      userMessage = userMessage ? `${storyContext} - Mensagem: "${userMessage}"` : storyContext;
+      appendLog('inbound', `Gatilho de Story recebido de @${rawIdentifier} (${emoji})`, 'info');
+    } else if (isCommentTrigger) {
+      const commentContent = body.comment || body.comment_text || userMessage || 'Interesse manifestado';
+      const commentContext = `[Comentou na sua publicação/Reel do Instagram: "${commentContent}"]`;
+      userMessage = (userMessage && userMessage !== commentContent) ? `${commentContext} - Mensagem: "${userMessage}"` : commentContext;
+      appendLog('inbound', `Gatilho de Comentário recebido de @${rawIdentifier}: "${commentContent}"`, 'info');
     }
 
     // Normaliza identificador: se for usuário de Instagram, garante prefixo '@'
@@ -117,10 +143,11 @@ app.post('/api/inbound/webhook', validateWebhookSecret, async (req, res) => {
       aiResult.status
     );
 
-    // 8. Se atingiu o ICP ('qualified'), executa o transbordo duplo imediato (WhatsApp + CRM)
+    // 8. Se atingiu o ICP ('qualified'), executa o transbordo duplo imediato (WhatsApp Baileys + CRM)
     let transbordoResult = null;
     if (updatedLead.status === 'qualified') {
       transbordoResult = await transbordo.executeTransbordo(updatedLead);
+      appendLog('inbound', `🚨 Lead qualificado: @${updatedLead.identifier} -> Alerta WhatsApp enviado ao SDR e injetado no CRM.`, 'success');
     }
 
     const elapsedMs = Date.now() - startTime;
@@ -436,6 +463,135 @@ app.delete('/api/dashboard/accounts/:id', (req, res) => {
 });
 
 /**
+ * POST /api/dashboard/accounts/:id/session
+ * Importa diretamente o Cookie sessionid ou JSON de storageState sem precisar abrir navegador (ideal para VPS Linux)
+ */
+app.post('/api/dashboard/accounts/:id/session', async (req, res) => {
+  const accountId = req.params.id;
+  const account = db.getInstagramAccountById(accountId);
+  if (!account) {
+    return res.status(404).json({ success: false, error: 'Conta não encontrada no banco.' });
+  }
+
+  const { sessionid, storageState, cookies } = req.body || {};
+
+  try {
+    const cleanUser = String(account.username).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const sessionPath = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
+
+    let finalStorageState = null;
+
+    // Caso 1: storageState JSON completo
+    if (storageState) {
+      if (typeof storageState === 'string') {
+        try {
+          const parsed = JSON.parse(storageState);
+          if (parsed && (parsed.cookies || Array.isArray(parsed))) {
+            finalStorageState = Array.isArray(parsed) ? { cookies: parsed, origins: [{ origin: 'https://www.instagram.com', localStorage: [] }] } : parsed;
+          }
+        } catch (_) {}
+      } else if (typeof storageState === 'object' && storageState.cookies) {
+        finalStorageState = storageState;
+      }
+    }
+
+    // Caso 2: Array de cookies
+    if (!finalStorageState && (Array.isArray(cookies) || Array.isArray(storageState))) {
+      const cookieList = Array.isArray(cookies) ? cookies : storageState;
+      finalStorageState = {
+        cookies: cookieList.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain || '.instagram.com',
+          path: c.path || '/',
+          expires: c.expirationDate || c.expires || Math.floor(Date.now() / 1000) + 365 * 86400,
+          httpOnly: Boolean(c.httpOnly),
+          secure: Boolean(c.secure),
+          sameSite: c.sameSite || 'None'
+        })),
+        origins: [{ origin: 'https://www.instagram.com', localStorage: [] }]
+      };
+    }
+
+    // Caso 3: String de cookie ou sessionid isolado
+    const rawInput = sessionid || (typeof storageState === 'string' ? storageState : '');
+    if (!finalStorageState && rawInput) {
+      let cleanSessionId = rawInput.trim();
+      let cleanUserId = null;
+
+      if (cleanSessionId.includes('sessionid=')) {
+        const matchSession = cleanSessionId.match(/sessionid=([^;\s]+)/);
+        if (matchSession) cleanSessionId = matchSession[1];
+      }
+      if (rawInput.includes('ds_user_id=')) {
+        const matchUser = rawInput.match(/ds_user_id=([^;\s]+)/);
+        if (matchUser) cleanUserId = matchUser[1];
+      }
+
+      cleanSessionId = cleanSessionId.replace(/^['"]|['"]$/g, '');
+
+      if (!cleanSessionId || cleanSessionId.length < 10) {
+        return res.status(400).json({
+          success: false,
+          error: 'Valor de sessionid inválido ou muito curto.'
+        });
+      }
+
+      finalStorageState = {
+        cookies: [
+          {
+            name: 'sessionid',
+            value: cleanSessionId,
+            domain: '.instagram.com',
+            path: '/',
+            expires: Math.floor(Date.now() / 1000) + 365 * 86400,
+            httpOnly: true,
+            secure: true,
+            sameSite: 'None'
+          },
+          ...(cleanUserId ? [{
+            name: 'ds_user_id',
+            value: cleanUserId,
+            domain: '.instagram.com',
+            path: '/',
+            expires: Math.floor(Date.now() / 1000) + 365 * 86400,
+            httpOnly: false,
+            secure: true,
+            sameSite: 'None'
+          }] : [])
+        ],
+        origins: [{ origin: 'https://www.instagram.com', localStorage: [] }]
+      };
+    }
+
+    if (!finalStorageState) {
+      return res.status(400).json({
+        success: false,
+        error: 'Nenhum cookie sessionid ou JSON de sessão válido foi fornecido.'
+      });
+    }
+
+    if (!fs.existsSync(settings.paths.sessionsDir)) {
+      fs.mkdirSync(settings.paths.sessionsDir, { recursive: true });
+    }
+
+    fs.writeFileSync(sessionPath, JSON.stringify(finalStorageState, null, 2), 'utf8');
+
+    db.updateInstagramAccountStatus(account.id, 'active');
+    appendLog('outbound', `Sessão da conta @${account.username} importada com sucesso via sessionid!`, 'success');
+
+    return res.status(200).json({
+      success: true,
+      message: `Cookies salvos para @${account.username}! Conta ativada com sucesso.`,
+      sessionPath
+    });
+  } catch (err) {
+    appendLog('outbound', `Erro ao importar sessão para @${account.username}: ${err.message}`, 'error');
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /api/dashboard/accounts/:id/login
  * Abre o Playwright em modo VISÍVEL (headless: false) para autenticar a conta e salvar storageState
  */
@@ -620,6 +776,132 @@ app.post('/api/dashboard/config', (req, res) => {
     return res.status(200).json({
       success: true,
       message: 'Configurações salvas e aplicadas em memória com sucesso!'
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// ROTAS DE GERENCIAMENTO DO WHATSAPP BAILEYS NATIVO (QR CODE & STATUS)
+// ============================================================================
+
+/**
+ * GET /api/whatsapp/status
+ * Retorna o status de conexão atual do WhatsApp nativo Baileys
+ */
+app.get('/api/whatsapp/status', (req, res) => {
+  try {
+    const status = getNativeStatus();
+    return res.status(200).json({
+      success: true,
+      ...status
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * GET /api/whatsapp/qr
+ * Retorna o QR Code atual gerado em formato DataURL para renderização direta na UI
+ */
+app.get('/api/whatsapp/qr', (req, res) => {
+  try {
+    const status = getNativeStatus();
+    const qr = getNativeQrCode();
+    return res.status(200).json({
+      success: true,
+      qr,
+      state: status.state,
+      connected: status.connected,
+      user: status.user
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/whatsapp/reconnect
+ * Força a inicialização ou reconexão do socket Baileys
+ */
+app.post('/api/whatsapp/reconnect', async (req, res) => {
+  try {
+    appendLog('miner', 'Disparando reinicialização do WhatsApp Baileys Nativo...', 'info');
+    initNativeWhatsApp().catch(err => {
+      console.warn('⚠️ [WhatsApp] Aviso ao reinicializar:', err.message);
+    });
+    return res.status(200).json({
+      success: true,
+      message: 'Reconexão iniciada com sucesso. Verifique o QR Code ou status.'
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/whatsapp/disconnect
+ * Encerra sessão do WhatsApp e limpa arquivos de autenticação em disco
+ */
+app.post('/api/whatsapp/disconnect', async (req, res) => {
+  try {
+    appendLog('miner', 'Desconectando sessão local do WhatsApp Baileys...', 'info');
+    const result = await disconnectNativeWhatsApp();
+    return res.status(200).json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================================================
+// FILA DE DISPARO AUTOMÁTICO WHATSAPP (MÓDULO 3 MINERADOR MAPS)
+// ============================================================================
+
+/**
+ * GET /api/dashboard/whatsapp-dispatcher/status
+ * Retorna estado da fila de disparos de prospecção do WhatsApp
+ */
+app.get('/api/dashboard/whatsapp-dispatcher/status', (req, res) => {
+  try {
+    return res.status(200).json({
+      success: true,
+      status: whatsappDispatcher.getStatus()
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/whatsapp-dispatcher/toggle
+ * Liga ou pausa a fila de disparos automáticos no WhatsApp
+ */
+app.post('/api/dashboard/whatsapp-dispatcher/toggle', (req, res) => {
+  try {
+    const status = whatsappDispatcher.toggle();
+    appendLog('miner', `Fila automática de WhatsApp ${status.isRunning ? 'LIGADA' : 'PAUSADA'}.`, status.isRunning ? 'success' : 'warn');
+    return res.status(200).json({
+      success: true,
+      status
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/whatsapp-dispatcher/config
+ * Atualiza configurações de delay, limite e template da fila
+ */
+app.post('/api/dashboard/whatsapp-dispatcher/config', (req, res) => {
+  try {
+    const status = whatsappDispatcher.updateConfig(req.body);
+    appendLog('miner', 'Parâmetros da fila de WhatsApp atualizados.', 'info');
+    return res.status(200).json({
+      success: true,
+      status
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
@@ -861,6 +1143,11 @@ const server = app.listen(PORT, () => {
   console.log(`🖥️ Dashboard Web: http://localhost:${PORT}`);
   console.log(`🔗 Healthcheck: http://localhost:${PORT}/health`);
   console.log(`📥 Inbound Webhook: http://localhost:${PORT}/api/inbound/webhook`);
+
+  // Inicializa o motor Baileys em background automaticamente
+  initNativeWhatsApp().catch(err => {
+    console.warn(`⚠️ [WhatsApp Baileys] Inicialização em background: ${err.message}`);
+  });
 });
 
 // Encerramento gracioso

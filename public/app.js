@@ -127,6 +127,46 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnValidateLeadsWa = document.getElementById('btnValidateLeadsWa');
   const waValidationFeedback = document.getElementById('waValidationFeedback');
 
+  // Elementos do DOM - WhatsApp Nativo (Baileys)
+  const btnWaIndicator = document.getElementById('btnWaIndicator');
+  const waPulseDot = document.getElementById('waPulseDot');
+  const waStatusText = document.getElementById('waStatusText');
+  const waStatusMeta = document.getElementById('waStatusMeta');
+  const waModal = document.getElementById('waModal');
+  const waModalClose = document.getElementById('waModalClose');
+  const waStatusBanner = document.getElementById('waStatusBanner');
+  const waModalPulseDot = document.getElementById('waModalPulseDot');
+  const waModalStatusTitle = document.getElementById('waModalStatusTitle');
+  const waModalStatusDesc = document.getElementById('waModalStatusDesc');
+  const waQrWrapper = document.getElementById('waQrWrapper');
+  const waQrImage = document.getElementById('waQrImage');
+  const waQrSpinner = document.getElementById('waQrSpinner');
+  const waConnectedNotice = document.getElementById('waConnectedNotice');
+  const waConnectedPhoneDisplay = document.getElementById('waConnectedPhoneDisplay');
+  const btnWaRefreshQr = document.getElementById('btnWaRefreshQr');
+  const btnWaDisconnectSession = document.getElementById('btnWaDisconnectSession');
+  let waModalPollInterval = null;
+
+  // Elementos do DOM - Fila de Disparo Automático WhatsApp
+  const waDispatcherStatusBadge = document.getElementById('waDispatcherStatusBadge');
+  const waDispatcherPendingCount = document.getElementById('waDispatcherPendingCount');
+  const waDispatcherSentToday = document.getElementById('waDispatcherSentToday');
+  const btnToggleWaDispatcher = document.getElementById('btnToggleWaDispatcher');
+  const waDispatcherIcon = document.getElementById('waDispatcherIcon');
+  const waDispatcherBtnText = document.getElementById('waDispatcherBtnText');
+  const waDispatcherFeedback = document.getElementById('waDispatcherFeedback');
+
+  // Elementos do DOM - Modal de Importação de Cookies (Sessão Instagram)
+  const sessionCookieModal = document.getElementById('sessionCookieModal');
+  const sessionCookieModalClose = document.getElementById('sessionCookieModalClose');
+  const sessionCookieModalBtnCancel = document.getElementById('sessionCookieModalBtnCancel');
+  const sessionModalUsername = document.getElementById('sessionModalUsername');
+  const sessionModalAccountId = document.getElementById('sessionModalAccountId');
+  const formSessionCookie = document.getElementById('formSessionCookie');
+  const sessionCookieInput = document.getElementById('sessionCookieInput');
+  const btnSaveSessionCookie = document.getElementById('btnSaveSessionCookie');
+  const sessionCookieFeedback = document.getElementById('sessionCookieFeedback');
+
   // ============================================================================
   // FUNÇÃO DE FORMATAÇÃO DE TELEFONE (MÁSCARA BRASIL E.164)
   // ============================================================================
@@ -634,6 +674,8 @@ document.addEventListener('DOMContentLoaded', () => {
         sessionBadge = `<span class="badge-ui session-active">${icons.check}<span>Ativa (Cookies)</span></span>`;
       } else if (acc.status === 'challenged') {
         sessionBadge = `<span class="badge-ui session-challenged"><span>Desafio 2FA</span></span>`;
+      } else if (acc.status === 'needs_auth') {
+        sessionBadge = `<span class="badge-ui session-needs-auth"><span>Requer Cookies</span></span>`;
       }
 
       const proxyText = acc.proxy ? `<span class="font-mono text-subtle" title="${escapeHtml(acc.proxy)}" style="display: block; font-size: 0.7rem;">Proxy configurado</span>` : '';
@@ -650,10 +692,18 @@ document.addEventListener('DOMContentLoaded', () => {
           <td class="font-mono">${acc.sent_today} / ${acc.daily_limit}</td>
           <td>${sessionBadge}</td>
           <td style="text-align: right;">
-            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 8px;">
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+              <button class="btn btn-secondary btn-xs btn-cookie-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Colar Cookie sessionid ou JSON do StorageState (ideal para VPS Linux)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                  <line x1="12" y1="22.08" x2="12" y2="12"/>
+                </svg>
+                <span>Importar Cookie</span>
+              </button>
               <button class="btn btn-secondary btn-xs btn-login-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Abrir Chromium visível e fazer login no Instagram">
                 ${icons.login}
-                <span>Autenticar no Navegador</span>
+                <span>Navegador</span>
               </button>
               <button class="btn-delete-acc" data-id="${acc.id}" data-username="${escapeHtml(acc.username)}" type="button" title="Remover conta e apagar cookies">
                 ${icons.trash}
@@ -663,6 +713,15 @@ document.addEventListener('DOMContentLoaded', () => {
         </tr>
       `;
     }).join('');
+
+    // Wire up Cookie Import handlers
+    document.querySelectorAll('.btn-cookie-acc').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const id = btn.getAttribute('data-id');
+        const username = btn.getAttribute('data-username');
+        openSessionCookieModal(id, username);
+      });
+    });
 
     // Wire up Login handlers
     document.querySelectorAll('.btn-login-acc').forEach(btn => {
@@ -791,6 +850,84 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // ============================================================================
+  // IMPORTAÇÃO DE COOKIES / SESSIONID (HEADLESS & VPS COMPATIBLE)
+  // ============================================================================
+  function openSessionCookieModal(accountId, username) {
+    if (!sessionCookieModal) return;
+    sessionModalAccountId.value = accountId;
+    sessionModalUsername.textContent = `@${username}`;
+    sessionCookieInput.value = '';
+    sessionCookieFeedback.textContent = '';
+    sessionCookieFeedback.className = 'feedback-text';
+    btnSaveSessionCookie.disabled = false;
+    sessionCookieModal.classList.remove('hidden');
+    setTimeout(() => sessionCookieInput.focus(), 100);
+  }
+
+  function closeSessionCookieModal() {
+    if (!sessionCookieModal) return;
+    sessionCookieModal.classList.add('hidden');
+  }
+
+  if (sessionCookieModalClose) sessionCookieModalClose.addEventListener('click', closeSessionCookieModal);
+  if (sessionCookieModalBtnCancel) sessionCookieModalBtnCancel.addEventListener('click', closeSessionCookieModal);
+  if (sessionCookieModal) {
+    sessionCookieModal.addEventListener('click', (e) => {
+      if (e.target === sessionCookieModal) closeSessionCookieModal();
+    });
+  }
+
+  if (formSessionCookie) {
+    formSessionCookie.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const accountId = sessionModalAccountId.value;
+      const rawInput = sessionCookieInput.value.trim();
+
+      if (!rawInput) {
+        sessionCookieFeedback.textContent = 'Cole o cookie sessionid ou o JSON da sessão.';
+        sessionCookieFeedback.className = 'feedback-text error';
+        return;
+      }
+
+      btnSaveSessionCookie.disabled = true;
+      sessionCookieFeedback.textContent = 'Salvando e validando sessão...';
+      sessionCookieFeedback.className = 'feedback-text';
+
+      try {
+        const res = await fetch(`/api/dashboard/accounts/${accountId}/session`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionid: rawInput })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          sessionCookieFeedback.textContent = `Erro: ${data.error || 'Falha ao salvar sessão'}`;
+          sessionCookieFeedback.className = 'feedback-text error';
+          btnSaveSessionCookie.disabled = false;
+          return;
+        }
+
+        sessionCookieFeedback.textContent = 'Sessão salva com sucesso!';
+        sessionCookieFeedback.className = 'feedback-text success';
+        btnSaveSessionCookie.disabled = false;
+
+        await loadAccounts();
+        await loadStats();
+
+        setTimeout(() => {
+          closeSessionCookieModal();
+        }, 1200);
+
+      } catch (err) {
+        sessionCookieFeedback.textContent = `Erro de rede: ${err.message}`;
+        sessionCookieFeedback.className = 'feedback-text error';
+        btnSaveSessionCookie.disabled = false;
+      }
+    });
+  }
+
   btnRefreshAccounts.addEventListener('click', loadAccounts);
 
   // ============================================================================
@@ -855,10 +992,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Validação Ativa de WhatsApp dos Leads (wa-checker.js)
+  // Validação Ativa de WhatsApp dos Leads (wa-checker.js Baileys Nativo)
   btnValidateLeadsWa.addEventListener('click', async () => {
     btnValidateLeadsWa.disabled = true;
-    waValidationFeedback.textContent = 'Consultando a Evolution API para validar os leads não verificados...';
+    waValidationFeedback.textContent = 'Consultando o WhatsApp Baileys Nativo para validar leads (fixos e celulares)...';
     waValidationFeedback.className = 'feedback-text';
 
     try {
@@ -1055,8 +1192,291 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Escape') {
       if (!leadModal.classList.contains('hidden')) closeLeadModal();
       if (!settingsModal.classList.contains('hidden')) closeSettingsModal();
+      if (waModal && !waModal.classList.contains('hidden')) closeWhatsAppModal();
     }
   });
+
+  // ============================================================================
+  // 9. GERENCIAMENTO DO WHATSAPP BAILEYS NATIVO (MODAL, QR CODE & STATUS)
+  // ============================================================================
+  async function fetchWhatsAppStatus() {
+    try {
+      const res = await fetch('/api/whatsapp/status');
+      const data = await res.json();
+      if (!data.success) return null;
+      renderWhatsAppStatus(data);
+      return data;
+    } catch (err) {
+      console.warn('Erro ao consultar status WhatsApp:', err.message);
+      return null;
+    }
+  }
+
+  async function fetchWhatsAppQr() {
+    try {
+      const res = await fetch('/api/whatsapp/qr');
+      const data = await res.json();
+      if (!data.success) return null;
+      renderWhatsAppStatus(data, data.qr);
+      return data;
+    } catch (err) {
+      console.warn('Erro ao obter QR Code do WhatsApp:', err.message);
+      return null;
+    }
+  }
+
+  function renderWhatsAppStatus(status, qrDataUrl = null) {
+    if (!status) return;
+    const qr = qrDataUrl || status.qrCode;
+
+    // 1. Atualiza indicador da Topbar
+    if (status.connected) {
+      if (waPulseDot) {
+        waPulseDot.style.backgroundColor = 'var(--emerald)';
+        waPulseDot.style.boxShadow = '0 0 6px var(--emerald)';
+      }
+      if (waStatusText) {
+        waStatusText.textContent = 'WhatsApp: Conectado';
+        waStatusText.style.color = 'var(--emerald)';
+      }
+      if (waStatusMeta) {
+        waStatusMeta.textContent = status.user ? `+${status.user}` : 'Ativo';
+      }
+    } else if (status.state === 'QR_READY') {
+      if (waPulseDot) {
+        waPulseDot.style.backgroundColor = 'var(--amber)';
+        waPulseDot.style.boxShadow = '0 0 6px var(--amber)';
+      }
+      if (waStatusText) {
+        waStatusText.textContent = 'WhatsApp: Ler QR Code';
+        waStatusText.style.color = 'var(--amber)';
+      }
+      if (waStatusMeta) {
+        waStatusMeta.textContent = 'Aguardando';
+      }
+    } else if (status.state === 'CONNECTING') {
+      if (waPulseDot) {
+        waPulseDot.style.backgroundColor = 'var(--blue)';
+        waPulseDot.style.boxShadow = '0 0 6px var(--blue)';
+      }
+      if (waStatusText) {
+        waStatusText.textContent = 'WhatsApp: Conectando...';
+        waStatusText.style.color = 'var(--blue)';
+      }
+      if (waStatusMeta) {
+        waStatusMeta.textContent = 'Aguarde';
+      }
+    } else {
+      if (waPulseDot) {
+        waPulseDot.style.backgroundColor = 'var(--red)';
+        waPulseDot.style.boxShadow = '0 0 6px var(--red)';
+      }
+      if (waStatusText) {
+        waStatusText.textContent = 'WhatsApp: Desconectado';
+        waStatusText.style.color = 'var(--red)';
+      }
+      if (waStatusMeta) {
+        waStatusMeta.textContent = 'Ler QR';
+      }
+    }
+
+    // 2. Atualiza Modal se estiver aberto
+    if (waModal && !waModal.classList.contains('hidden')) {
+      waStatusBanner.className = 'wa-status-box';
+
+      if (status.connected) {
+        waStatusBanner.classList.add('connected');
+        if (waModalPulseDot) {
+          waModalPulseDot.style.backgroundColor = 'var(--emerald)';
+          waModalPulseDot.style.boxShadow = '0 0 6px var(--emerald)';
+        }
+        if (waModalStatusTitle) {
+          waModalStatusTitle.textContent = 'Conectado com Sucesso!';
+          waModalStatusTitle.style.color = 'var(--emerald)';
+        }
+        if (waModalStatusDesc) {
+          waModalStatusDesc.textContent = `Operando número +${status.user || 'autenticado'}. Disparos e validações ativos.`;
+        }
+
+        if (waQrImage) waQrImage.style.display = 'none';
+        if (waQrSpinner) waQrSpinner.style.display = 'none';
+        if (waConnectedNotice) waConnectedNotice.style.display = 'flex';
+        if (waConnectedPhoneDisplay) waConnectedPhoneDisplay.textContent = status.user ? `+${status.user}` : 'Número Conectado';
+      } else if (status.state === 'QR_READY' && qr) {
+        waStatusBanner.classList.add('qr-ready');
+        if (waModalPulseDot) {
+          waModalPulseDot.style.backgroundColor = 'var(--amber)';
+          waModalPulseDot.style.boxShadow = '0 0 6px var(--amber)';
+        }
+        if (waModalStatusTitle) {
+          waModalStatusTitle.textContent = 'QR Code Pronto para Leitura';
+          waModalStatusTitle.style.color = 'var(--amber)';
+        }
+        if (waModalStatusDesc) {
+          waModalStatusDesc.textContent = 'Aponte a câmera do WhatsApp para autenticar.';
+        }
+
+        if (waConnectedNotice) waConnectedNotice.style.display = 'none';
+        if (waQrSpinner) waQrSpinner.style.display = 'none';
+        if (waQrImage) {
+          waQrImage.src = qr;
+          waQrImage.style.display = 'block';
+        }
+      } else if (status.state === 'CONNECTING') {
+        waStatusBanner.classList.add('connecting');
+        if (waModalPulseDot) {
+          waModalPulseDot.style.backgroundColor = 'var(--blue)';
+          waModalPulseDot.style.boxShadow = '0 0 6px var(--blue)';
+        }
+        if (waModalStatusTitle) {
+          waModalStatusTitle.textContent = 'Conectando ao WhatsApp...';
+          waModalStatusTitle.style.color = 'var(--blue)';
+        }
+        if (waModalStatusDesc) {
+          waModalStatusDesc.textContent = 'Inicializando socket local Baileys...';
+        }
+
+        if (waConnectedNotice) waConnectedNotice.style.display = 'none';
+        if (waQrImage) waQrImage.style.display = 'none';
+        if (waQrSpinner) waQrSpinner.style.display = 'flex';
+      } else {
+        waStatusBanner.classList.add('disconnected');
+        if (waModalPulseDot) {
+          waModalPulseDot.style.backgroundColor = 'var(--red)';
+          waModalPulseDot.style.boxShadow = '0 0 6px var(--red)';
+        }
+        if (waModalStatusTitle) {
+          waModalStatusTitle.textContent = 'Sessão Desconectada';
+          waModalStatusTitle.style.color = 'var(--red)';
+        }
+        if (waModalStatusDesc) {
+          waModalStatusDesc.textContent = 'Clique em "Regerar QR / Reconectar" para iniciar nova sessão.';
+        }
+
+        if (waConnectedNotice) waConnectedNotice.style.display = 'none';
+        if (waQrImage) waQrImage.style.display = 'none';
+        if (waQrSpinner) waQrSpinner.style.display = 'flex';
+      }
+    }
+  }
+
+  function openWhatsAppModal() {
+    if (!waModal) return;
+    waModal.classList.remove('hidden');
+    fetchWhatsAppQr();
+
+    if (waModalPollInterval) clearInterval(waModalPollInterval);
+    waModalPollInterval = setInterval(fetchWhatsAppQr, 2500);
+  }
+
+  function closeWhatsAppModal() {
+    if (!waModal) return;
+    waModal.classList.add('hidden');
+    if (waModalPollInterval) {
+      clearInterval(waModalPollInterval);
+      waModalPollInterval = null;
+    }
+  }
+
+  if (btnWaIndicator) btnWaIndicator.addEventListener('click', openWhatsAppModal);
+  if (waModalClose) waModalClose.addEventListener('click', closeWhatsAppModal);
+  if (waModal) {
+    waModal.addEventListener('click', (e) => {
+      if (e.target === waModal) closeWhatsAppModal();
+    });
+  }
+
+  if (btnWaRefreshQr) {
+    btnWaRefreshQr.addEventListener('click', async () => {
+      if (waModalStatusTitle) waModalStatusTitle.textContent = 'Reiniciando motor Baileys...';
+      if (waQrImage) waQrImage.style.display = 'none';
+      if (waQrSpinner) waQrSpinner.style.display = 'flex';
+      try {
+        await fetch('/api/whatsapp/reconnect', { method: 'POST' });
+        setTimeout(fetchWhatsAppQr, 1000);
+      } catch (err) {
+        console.error('Erro ao reconectar WhatsApp:', err);
+      }
+    });
+  }
+
+  if (btnWaDisconnectSession) {
+    btnWaDisconnectSession.addEventListener('click', async () => {
+      if (!confirm('Deseja realmente desconectar o WhatsApp e limpar as credenciais salvas?')) {
+        return;
+      }
+      try {
+        await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+        await fetchWhatsAppQr();
+        await fetchWhatsAppStatus();
+      } catch (err) {
+        console.error('Erro ao desconectar WhatsApp:', err);
+      }
+    });
+  }
+
+  // ============================================================================
+  // FILA DE DISPARO AUTOMÁTICO WHATSAPP (BAILEYS NATIVO)
+  // ============================================================================
+  async function loadWaDispatcherStatus() {
+    if (!waDispatcherStatusBadge) return;
+    try {
+      const res = await fetch('/api/dashboard/whatsapp-dispatcher/status');
+      const data = await res.json();
+      if (!data.success || !data.status) return;
+
+      const s = data.status;
+      if (waDispatcherPendingCount) waDispatcherPendingCount.textContent = s.pendingCount || 0;
+      if (waDispatcherSentToday) waDispatcherSentToday.textContent = s.sentToday || 0;
+
+      if (s.isRunning) {
+        waDispatcherStatusBadge.className = 'status-pill running';
+        waDispatcherStatusBadge.textContent = 'Ativa (Enviando)';
+        if (waDispatcherBtnText) waDispatcherBtnText.textContent = 'Pausar Fila de Disparo';
+        if (btnToggleWaDispatcher) btnToggleWaDispatcher.className = 'btn btn-secondary-dark btn-sm';
+        if (waDispatcherIcon) {
+          waDispatcherIcon.innerHTML = '<rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect>';
+        }
+      } else {
+        waDispatcherStatusBadge.className = 'status-pill idle';
+        waDispatcherStatusBadge.textContent = 'Pausada';
+        if (waDispatcherBtnText) waDispatcherBtnText.textContent = 'Ligar Fila de Disparo';
+        if (btnToggleWaDispatcher) btnToggleWaDispatcher.className = 'btn btn-secondary btn-sm';
+        if (waDispatcherIcon) {
+          waDispatcherIcon.innerHTML = '<polygon points="5 3 19 12 5 21 5 3"></polygon>';
+        }
+      }
+
+      if (s.lastError) {
+        waDispatcherFeedback.textContent = s.lastError;
+        waDispatcherFeedback.className = 'feedback-text error';
+      } else if (s.isRunning) {
+        waDispatcherFeedback.textContent = s.currentLead ? `Abordando: ${s.currentLead.company_name || s.currentLead.phone}...` : 'Aguardando próximo ciclo seguro...';
+        waDispatcherFeedback.className = 'feedback-text success';
+      } else {
+        waDispatcherFeedback.textContent = '';
+      }
+    } catch (err) {
+      console.error('Erro ao consultar status da fila WhatsApp:', err);
+    }
+  }
+
+  if (btnToggleWaDispatcher) {
+    btnToggleWaDispatcher.addEventListener('click', async () => {
+      btnToggleWaDispatcher.disabled = true;
+      try {
+        const res = await fetch('/api/dashboard/whatsapp-dispatcher/toggle', { method: 'POST' });
+        const data = await res.json();
+        if (data.success && data.status) {
+          await loadWaDispatcherStatus();
+        }
+      } catch (err) {
+        console.error('Erro ao alternar fila WhatsApp:', err);
+      } finally {
+        btnToggleWaDispatcher.disabled = false;
+      }
+    });
+  }
 
   // ============================================================================
   // 10. POLLING & ATUALIZAÇÕES PERIÓDICAS
@@ -1068,6 +1488,7 @@ document.addEventListener('DOMContentLoaded', () => {
       await loadLeads();
       await loadExports();
       await pollLogs();
+      await loadWaDispatcherStatus();
     }, 2500);
   }
 
@@ -1081,6 +1502,8 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadLeads();
     await loadExports();
     await pollLogs();
+    await fetchWhatsAppStatus();
+    await loadWaDispatcherStatus();
     btnRefreshAll.style.opacity = '1';
   });
 
@@ -1101,11 +1524,15 @@ document.addEventListener('DOMContentLoaded', () => {
   loadLeads();
   loadExports();
   pollLogs();
+  fetchWhatsAppStatus();
+  loadWaDispatcherStatus();
 
-  // Loop de polling de heartbeat (logs e stats a cada 3s)
+  // Loop de polling de heartbeat (logs, stats, status WhatsApp e dispatcher a cada 3s)
   setInterval(() => {
     loadStats();
     pollLogs();
+    fetchWhatsAppStatus();
+    loadWaDispatcherStatus();
   }, 3000);
 });
 

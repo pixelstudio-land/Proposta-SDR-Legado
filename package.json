@@ -16,7 +16,11 @@
     "express": "^4.21.2",
     "openai": "^4.85.4",
     "playwright": "^1.50.1",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "pino": "^10.4.0",
+    "qrcode": "^1.5.4",
+    "cors": "^2.8.5"
   },
   "engines": {
     "node": ">=18.0.0"

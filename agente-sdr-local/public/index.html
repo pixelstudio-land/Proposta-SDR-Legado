@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agente SDR | Prospecção Autônoma B2B</title>
+  <meta name="description" content="Sistema autônomo de prospecção corporativa via WhatsApp com filtro de estabelecimentos e validação de páginas.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- BARRA SUPERIOR -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-text">
+          <h1>SDR <span>AUTÔNOMO</span></h1>
+          <p class="brand-subtitle">Serviço Local Ativo</p>
+        </div>
+      </div>
+
+      <div class="header-center">
+        <div id="shift-badge" class="badge badge-waiting">
+          <span class="pulse-dot"></span>
+          <span id="shift-text">Calculando Horário...</span>
+        </div>
+        <div class="digital-clock" id="live-clock">--:--:--</div>
+      </div>
+
+      <div class="header-actions">
+        <button id="btn-toggle-pause" class="btn btn-secondary">
+          Pausar Expediente
+        </button>
+        <button id="btn-open-qr-modal" class="btn btn-primary">
+          Conexão WhatsApp
+        </button>
+      </div>
+    </header>
+
+    <!-- CARDS DE ESTATÍSTICAS (KPIS) -->
+    <section class="kpi-grid">
+      <div class="kpi-card" id="kpi-disparos">
+        <div class="kpi-info">
+          <span class="kpi-label">Disparos Hoje</span>
+          <h2 class="kpi-value"><span id="stat-sent-today">0</span><small id="stat-daily-limit">/40</small></h2>
+          <div class="kpi-progress-bar">
+            <div class="kpi-progress-fill" id="stat-progress-fill" style="width: 0%;"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-fila">
+        <div class="kpi-info">
+          <span class="kpi-label">Fila Pendente</span>
+          <h2 class="kpi-value" id="stat-pending">0</h2>
+          <span class="kpi-subtext">Aguardando intervalo seguro</span>
+        </div>
+      </div>
+
+      <div class="kpi-card hot-lead-kpi" id="kpi-respostas">
+        <div class="kpi-info">
+          <span class="kpi-label">Leads com Resposta</span>
+          <h2 class="kpi-value highlight-fire" id="stat-replied">0</h2>
+          <span class="kpi-subtext">Clientes qualificados</span>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-whatsapp">
+        <div class="kpi-info">
+          <span class="kpi-label">Status WhatsApp</span>
+          <h2 class="kpi-value-sm" id="stat-wa-status">Desconectado</h2>
+          <span class="kpi-subtext" id="stat-wa-phone">Ler QR Code</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- NAVEGAÇÃO DE ABAS -->
+    <nav class="tabs-nav">
+      <button class="tab-btn active" data-tab="tab-dashboard">
+        Centro de Comando
+      </button>
+      <button class="tab-btn" data-tab="tab-leads">
+        Fila de Leads (<span id="tab-lead-count">0</span>)
+      </button>
+      <button class="tab-btn" data-tab="tab-miner">
+        Minerador de Empresas
+      </button>
+      <button class="tab-btn" data-tab="tab-config">
+        Configurações & Ganchos
+      </button>
+      <button class="tab-btn" data-tab="tab-catalog">
+        Catálogo de Soluções
+      </button>
+    </nav>
+
+    <!-- CONTEÚDO DAS ABAS -->
+    <main class="tabs-content">
+
+      <!-- ABA 1: CENTRO DE COMANDO -->
+      <section id="tab-dashboard" class="tab-panel active">
+        <div class="dashboard-grid">
+          <!-- CARD DO FUNCIONÁRIO SDR -->
+          <div class="glass-card employee-status-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div>
+                  <h3>Operação do Agente SDR</h3>
+                  <p class="text-muted">Horário configurado: 09:00 às 18:00</p>
+                </div>
+              </div>
+              <span id="worker-state-pill" class="pill pill-offline">Carregando...</span>
+            </div>
+
+            <div class="employee-current-activity">
+              <div class="activity-label">ATIVIDADE ATUAL EM TEMPO REAL:</div>
+              <div class="activity-box" id="worker-live-activity">
+                Iniciando motores e conectando ao banco de dados...
+              </div>
+            </div>
+
+            <div class="countdown-container" id="countdown-wrapper" style="display: none;">
+              <div class="countdown-header">
+                <span>Próximo Disparo em:</span>
+                <span class="countdown-timer" id="countdown-display">--:--</span>
+              </div>
+              <div class="cadence-desc">
+                Intervalo randômico de cadência para preservar a reputação do número de envio.
+              </div>
+            </div>
+
+            <div class="quick-controls-row">
+              <button id="btn-quick-mine" class="btn btn-secondary">
+                Minerar Lote Agora
+              </button>
+              <button id="btn-open-test-modal" class="btn btn-secondary">
+                Enviar Teste para Meu Número
+              </button>
+            </div>
+          </div>
+
+          <!-- CARD WHATSAPP RÁPIDO -->
+          <div class="glass-card wa-quick-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div>
+                  <h3>Conexão WhatsApp Web</h3>
+                  <p class="text-muted">Motor local Baileys</p>
+                </div>
+              </div>
+              <span id="wa-state-pill" class="pill pill-offline">Desconectado</span>
+            </div>
+
+            <div class="wa-content-area" id="wa-display-area">
+              <div class="qr-placeholder">
+                <div class="spinner"></div>
+                <p>Verificando conexão...</p>
+              </div>
+            </div>
+
+            <div class="wa-alert-box">
+              <p>O envio ocorre com simulação de digitação e verificação prévia se o contato possui conta ativa no WhatsApp antes de disparar.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- LOGS EM TEMPO REAL -->
+        <div class="glass-card logs-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div>
+                <h3>Terminal de Ações</h3>
+                <p class="text-muted">Registro em tempo real das operações locais</p>
+              </div>
+            </div>
+            <button id="btn-clear-logs" class="btn btn-sm btn-outline">Limpar Visualização</button>
+          </div>
+          <div class="terminal-body" id="live-terminal">
+            <div class="log-line info">[SISTEMA] Painel inicializado. Aguardando eventos...</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 2: FILA DE LEADS -->
+      <section id="tab-leads" class="tab-panel">
+        <div class="glass-card">
+          <div class="table-header-controls">
+            <div class="filters-group">
+              <input type="text" id="lead-search-input" class="form-input search-input" placeholder="Buscar por nome, telefone, nicho ou cidade...">
+              <select id="lead-status-filter" class="form-select">
+                <option value="TODOS">Todos os Status</option>
+                <option value="PENDENTE">Apenas Pendentes (Na fila)</option>
+                <option value="ENVIADO">Apenas Enviados</option>
+                <option value="RESPONDIDO">Apenas com Resposta</option>
+                <option value="SEM_WHATSAPP">Sem WhatsApp Ativo</option>
+                <option value="FALHA">Falhas de Envio</option>
+              </select>
+              <select id="lead-tier-filter" class="form-select">
+                <option value="TODOS">Todas as Prioridades</option>
+                <option value="OURO">Prioridade Ouro (Score 80+)</option>
+                <option value="PRATA">Prioridade Prata (Score 60-79)</option>
+                <option value="BRONZE">Prioridade Bronze (Score &lt; 60)</option>
+              </select>
+            </div>
+            <div class="table-actions">
+              <button id="btn-refresh-leads" class="btn btn-secondary btn-sm">Atualizar</button>
+              <button id="btn-clear-queue" class="btn btn-danger btn-sm">Esvaziar Fila Pendente</button>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table class="leads-table" id="leads-table">
+              <thead>
+                <tr>
+                  <th>Prioridade</th>
+                  <th>Status</th>
+                  <th>Empresa / Lead</th>
+                  <th>Telefone (WhatsApp)</th>
+                  <th>Preço Sugerido</th>
+                  <th>Diagnóstico</th>
+                  <th>Ações</th>
+                </tr>
+              </thead>
+              <tbody id="leads-table-body">
+                <tr>
+                  <td colspan="7" class="text-center py-4 text-muted">Carregando leads...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 3: MINERADOR DE EMPRESAS -->
+      <section id="tab-miner" class="tab-panel">
+        <div class="miner-grid">
+          <!-- MINERAR POR NICHO E CIDADE -->
+          <div class="glass-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div>
+                  <h3>Localizar Empresas por Região</h3>
+                  <p class="text-muted">Consulta bases públicas e mapeia contatos</p>
+                </div>
+              </div>
+            </div>
+
+            <form id="form-mine-manual" class="form-stack">
+              <div class="form-group">
+                <label for="mine-niche">Nicho / Ramo de Atuação:</label>
+                <input type="text" id="mine-niche" class="form-input" placeholder="Ex: Odontologia, Restaurante, Clinica, Advocacia" value="Odontologia" required>
+              </div>
+
+              <div class="form-group">
+                <label for="mine-city">Cidade / Região:</label>
+                <input type="text" id="mine-city" class="form-input" placeholder="Ex: Campinas, Sorocaba, Santos" value="Campinas" required>
+              </div>
+
+              <button type="submit" id="btn-start-mine" class="btn btn-primary btn-block">
+                Iniciar Busca & Auditar Leads
+              </button>
+            </form>
+
+            <div id="mine-result-box" class="mine-result-box" style="display: none;"></div>
+          </div>
+
+          <!-- IMPORTAÇÃO RÁPIDA -->
+          <div class="glass-card">
+            <div class="card-header">
+              <div class="card-title-group">
+                <div>
+                  <h3>Importar Lista Própria</h3>
+                  <p class="text-muted">Cole uma lista de nomes e números (Excel, CSV ou Bloco de Notas)</p>
+                </div>
+              </div>
+            </div>
+
+            <form id="form-import-leads" class="form-stack">
+              <div class="form-group">
+                <label for="import-text">Formato: <code>Nome; Telefone; Site (opcional); Nicho; Cidade</code> (1 por linha):</label>
+                <textarea id="import-text" class="form-textarea" rows="6" placeholder="Clinica Odonto Life; 19991234567; odontolife.com.br; Odontologia; Campinas&#10;Restaurante Sol; 11988887777; ; Restaurante; Sao Paulo"></textarea>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Nicho Padrão:</label>
+                  <input type="text" id="import-default-niche" class="form-input" value="Comércio Local">
+                </div>
+                <div class="form-group">
+                  <label>Cidade Padrão:</label>
+                  <input type="text" id="import-default-city" class="form-input" value="Local">
+                </div>
+              </div>
+
+              <button type="submit" id="btn-start-import" class="btn btn-secondary btn-block">
+                Processar e Auditar Contatos
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ABA 4: CONFIGURAÇÕES & GANCHOS -->
+      <section id="tab-config" class="tab-panel">
+        <div class="glass-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div>
+                <h3>Parâmetros Operacionais & Segurança</h3>
+                <p class="text-muted">Defina horários, intervalos entre mensagens e textos padrão</p>
+              </div>
+            </div>
+            <button id="btn-save-config" class="btn btn-primary">Salvar Alterações</button>
+          </div>
+
+          <form id="form-config" class="config-grid">
+            <div class="config-section">
+              <h4>Horário de Atividade</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="cfg-work-start">Início do Expediente:</label>
+                  <input type="time" id="cfg-work-start" class="form-input" value="09:00">
+                </div>
+                <div class="form-group">
+                  <label for="cfg-work-end">Fim do Expediente:</label>
+                  <input type="time" id="cfg-work-end" class="form-input" value="18:00">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Dias de Operação:</label>
+                <div class="checkbox-row">
+                  <label><input type="checkbox" id="cfg-day-1" checked> Seg</label>
+                  <label><input type="checkbox" id="cfg-day-2" checked> Ter</label>
+                  <label><input type="checkbox" id="cfg-day-3" checked> Qua</label>
+                  <label><input type="checkbox" id="cfg-day-4" checked> Qui</label>
+                  <label><input type="checkbox" id="cfg-day-5" checked> Sex</label>
+                  <label><input type="checkbox" id="cfg-day-6"> Sáb</label>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cfg-personal-whatsapp">WhatsApp Pessoal para Alerta de Retorno:</label>
+                <input type="text" id="cfg-personal-whatsapp" class="form-input" placeholder="Ex: 11987654321">
+                <span class="field-hint">Quando um lead responder, o aviso e o contato chegam diretamente neste número.</span>
+              </div>
+
+              <div class="form-group">
+                <label for="cfg-portfolio-url">Link Base da Vitrine de Modelos (Portfólio Dinâmico):</label>
+                <input type="text" id="cfg-portfolio-url" class="form-input" value="http://localhost:3001/vitrine/">
+                <span class="field-hint">O robô anexa automaticamente o nicho e a cidade ao link enviado ao cliente.</span>
+              </div>
+            </div>
+
+            <div class="config-section">
+              <h4>Cadência e Limites de Segurança</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="cfg-min-delay">Intervalo Mínimo (segundos):</label>
+                  <input type="number" id="cfg-min-delay" class="form-input" value="240" min="60">
+                  <span class="field-hint">Padrão seguro: 240 segundos (4 minutos)</span>
+                </div>
+                <div class="form-group">
+                  <label for="cfg-max-delay">Intervalo Máximo (segundos):</label>
+                  <input type="number" id="cfg-max-delay" class="form-input" value="480" min="120">
+                  <span class="field-hint">Padrão seguro: 480 segundos (8 minutos)</span>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label for="cfg-daily-limit">Limite Diário de Envios:</label>
+                <input type="number" id="cfg-daily-limit" class="form-input" value="40" min="5" max="100">
+                <span class="field-hint">Limite para manter o número seguro contra restrições</span>
+              </div>
+
+              <div class="form-group">
+                <label><input type="checkbox" id="cfg-auto-pilot" checked> Modo Autônomo Contínuo (buscar novos leads quando a fila terminar)</label>
+              </div>
+            </div>
+
+            <div class="config-section full-width">
+              <h4>Mercados Alvo para Busca Contínua</h4>
+              <div class="form-row">
+                <div class="form-group">
+                  <label for="cfg-target-niches">Nichos de Negócios (separados por vírgula):</label>
+                  <input type="text" id="cfg-target-niches" class="form-input" value="Odontologia, Restaurantes, Hamburguerias, Clinicas Esteticas, Barbearias, Autopecas, Imobiliarias, Advocacia">
+                </div>
+                <div class="form-group">
+                  <label for="cfg-target-cities">Cidades (separadas por vírgula):</label>
+                  <input type="text" id="cfg-target-cities" class="form-input" value="Campinas, Sorocaba, Santos, Ribeirão Preto, São José dos Campos">
+                </div>
+              </div>
+            </div>
+
+            <div class="config-section full-width">
+              <h4>Textos dos Ganchos de Abordagem</h4>
+              <p class="text-muted">Variáveis disponíveis: <code>{{saudacao}}</code>, <code>{{empresa}}</code>, <code>{{nicho}}</code>, <code>{{cidade}}</code></p>
+
+              <div class="form-group mt-3">
+                <label><strong>1. Abordagem para Empresas sem Site:</strong></label>
+                <textarea id="cfg-pitch-no-site" class="form-textarea" rows="4"></textarea>
+              </div>
+
+              <div class="form-group mt-3">
+                <label><strong>2. Abordagem para Empresas com Site Lento ou sem WhatsApp:</strong></label>
+                <textarea id="cfg-pitch-bad-site" class="form-textarea" rows="4"></textarea>
+              </div>
+
+              <div class="form-group mt-3">
+                <label><strong>3. Abordagem para Empresas com Bom Site (Oferta de Sistemas):</strong></label>
+                <textarea id="cfg-pitch-has-site" class="form-textarea" rows="4"></textarea>
+              </div>
+            </div>
+          </form>
+        </div>
+      </section>
+
+      <!-- ABA 5: CATÁLOGO DE SOLUÇÕES -->
+      <section id="tab-catalog" class="tab-panel">
+        <div class="glass-card">
+          <div class="card-header">
+            <div class="card-title-group">
+              <div>
+                <h3>Soluções Disponíveis para Venda</h3>
+                <p class="text-muted">Modelos estruturados para entrega rápida ao cliente</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="catalog-grid">
+            <div class="catalog-card">
+              <div class="catalog-badge">Site / LP</div>
+              <h4>Landing Page de Alta Conversão</h4>
+              <p>Estrutura focada em carregar em menos de um segundo e conduzir o visitante diretamente ao botão de WhatsApp.</p>
+              <ul class="catalog-features">
+                <li>Design adaptado para dispositivos móveis</li>
+                <li>Botão flutuante para atendimento no WhatsApp</li>
+                <li>Otimização para velocidade</li>
+                <li>Hospedagem inclusa</li>
+              </ul>
+              <div class="catalog-price">Faixa sugerida: R$ 350 a R$ 800</div>
+            </div>
+
+            <div class="catalog-card">
+              <div class="catalog-badge badge-saas">Módulo SaaS</div>
+              <h4>Painel de Gestão e Mini-CRM</h4>
+              <p>Organização de contatos e histórico de conversas para equipes que recebem volume diário no WhatsApp.</p>
+              <ul class="catalog-features">
+                <li>Visualização em colunas de atendimento</li>
+                <li>Histórico de anotações por contato</li>
+                <li>Controle de retornos pendentes</li>
+                <li>Exportação de relatórios</li>
+              </ul>
+              <div class="catalog-price">Recorrência sugerida: R$ 97 a R$ 197/mês</div>
+            </div>
+
+            <div class="catalog-card">
+              <div class="catalog-badge badge-saas">Módulo SaaS</div>
+              <h4>Sistema de Agendamento Online</h4>
+              <p>Ideal para clínicas, consultórios, salões de beleza e profissionais liberais que precisam organizar horários.</p>
+              <ul class="catalog-features">
+                <li>Agendamento direto pelo cliente</li>
+                <li>Confirmação automática no WhatsApp</li>
+                <li>Integração com calendário</li>
+                <li>Redução de faltas</li>
+              </ul>
+              <div class="catalog-price">Recorrência sugerida: R$ 120 a R$ 250/mês</div>
+            </div>
+
+            <div class="catalog-card">
+              <div class="catalog-badge badge-saas">Módulo SaaS</div>
+              <h4>Cardápio Digital sem Comissões</h4>
+              <p>Voltado para restaurantes, pizzarias e hamburguerias que buscam independência de taxas de marketplaces.</p>
+              <ul class="catalog-features">
+                <li>Catálogo de itens com fotos e opções</li>
+                <li>Envio do pedido formatado no WhatsApp</li>
+                <li>Zero cobrança de comissão sobre vendas</li>
+                <li>Cálculo de taxa de entrega</li>
+              </ul>
+              <div class="catalog-price">Recorrência sugerida: R$ 140 a R$ 290/mês</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- MODAL DE PREVIEW E EDIÇÃO DA MENSAGEM DO LEAD -->
+    <div id="modal-lead-preview" class="modal-overlay" style="display: none;">
+      <div class="modal-card modal-card-lg">
+        <div class="modal-header">
+          <div>
+            <h3>Mensagem de Abordagem do Lead</h3>
+            <p class="text-muted" style="font-size: 0.78rem;">Gerada contextualmente pelo motor inteligente. Você pode editar ou gerar nova variação.</p>
+          </div>
+          <button class="modal-close" onclick="closeModal('modal-lead-preview')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="preview-meta" id="modal-lead-meta"></div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px; margin-bottom: 8px;">
+            <label for="modal-lead-text" style="font-size: 0.8rem; font-weight: 600; color: #94a3b8;">Texto da Abordagem (Editável em Tempo Real):</label>
+            <button id="btn-modal-regen" class="btn btn-sm btn-secondary" onclick="regenerateActiveLeadPitch()" title="Gera nova combinação com ângulo diferente">
+              Regerar com IA
+            </button>
+          </div>
+
+          <textarea id="modal-lead-text" class="preview-textarea" rows="9" placeholder="Carregando mensagem..."></textarea>
+          <div id="modal-lead-feedback" style="display: none; font-size: 0.78rem; color: #34d399; margin-top: 6px; font-weight: 500;"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('modal-lead-preview')">Fechar</button>
+          <button id="btn-modal-save" class="btn btn-secondary" onclick="saveActiveLeadMessage()">Salvar Alteração</button>
+          <button id="btn-modal-dispatch" class="btn btn-primary">Disparar Agora</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL DE TESTE DE DISPARO -->
+    <div id="modal-test-send" class="modal-overlay" style="display: none;">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Enviar Mensagem de Teste</h3>
+          <button class="modal-close" onclick="closeModal('modal-test-send')">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted mb-3">Envie uma mensagem para o seu próprio WhatsApp para verificar a entrega e a formatação do texto.</p>
+          <div class="form-group mb-3">
+            <label for="test-phone">Seu Telefone (com DDD):</label>
+            <input type="text" id="test-phone" class="form-input" placeholder="Ex: 11987654321">
+          </div>
+          <div class="form-group">
+            <label for="test-message">Texto de Teste:</label>
+            <textarea id="test-message" class="form-textarea" rows="4">Olá! Esta é uma mensagem de teste enviada pelo seu Agente SDR local.</textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeModal('modal-test-send')">Cancelar</button>
+          <button id="btn-execute-test" class="btn btn-primary">Enviar Teste</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

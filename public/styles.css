@@ -173,6 +173,53 @@ body {
   padding-left: 8px;
 }
 
+.status-indicator-clickable {
+  cursor: pointer;
+  user-select: none;
+  transition: var(--transition);
+}
+.status-indicator-clickable:hover {
+  background: #1a1a20;
+  border-color: var(--border-hover);
+  transform: translateY(-1px);
+}
+.status-indicator-clickable:active {
+  transform: translateY(0);
+}
+
+/* WhatsApp Baileys Nativo Modal & Status */
+.wa-status-box {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-card-subtle);
+  border: 1px solid var(--border-subtle);
+  transition: var(--transition);
+}
+.wa-status-box.connected {
+  border-color: var(--emerald-border);
+  background: var(--emerald-surface);
+}
+.wa-status-box.qr-ready {
+  border-color: var(--amber-border);
+  background: var(--amber-surface);
+}
+.wa-status-box.disconnected {
+  border-color: var(--red-border);
+  background: var(--red-surface);
+}
+.wa-status-box.connecting {
+  border-color: var(--blue-border);
+  background: var(--blue-surface);
+}
+.wa-qr-wrapper {
+  background: #ffffff;
+  border: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+}
+
 /* Layout */
 .main-container {
   max-width: 1440px;
@@ -1227,6 +1274,11 @@ input:-webkit-autofill:active {
   background: rgba(245, 158, 11, 0.12);
   color: #fbbf24;
   border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.session-needs-auth {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 /* Alert Banner */

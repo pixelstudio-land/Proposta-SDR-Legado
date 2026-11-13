@@ -52,33 +52,34 @@ class TargetScraper {
   }
 
   /**
-   * Realiza login no Instagram caso a sessão não exista ou tenha expirado
+   * Garante que a sessão da conta Scraper está válida
+   * BLINDAGEM: Não tenta digitar usuário/senha em headless (evita bloqueio imediato).
+   * Se a sessão não existir ou estiver expirada, pausa a conta com status 'needs_auth'.
    */
   async ensureAuthenticated(page, context, account) {
+    if (!fs.existsSync(account.sessionFile)) {
+      console.error(`🚨 [TargetScraper] Conta @${account.username} não possui sessão salva em disco (${account.sessionFile}).`);
+      try {
+        db.updateInstagramAccountStatus(account.id, 'needs_auth');
+      } catch (_) {}
+      throw new Error(`Conta @${account.username} requer autenticação (status 'needs_auth'). Importe o cookie sessionid no painel web.`);
+    }
+
     await page.goto('https://www.instagram.com/', { waitUntil: 'domcontentloaded', timeout: 30000 });
     await this.sleep(this.randomDelay(2000, 3500));
 
-    // Se encontrar campo de login, preenche
+    const currentUrl = page.url();
     const loginField = await page.$('input[name="username"]');
-    if (loginField) {
-      console.log(`🔑 [TargetScraper] Efetuando login orgânico para @${account.username}...`);
 
-      await page.fill('input[name="username"]', account.username);
-      await this.sleep(this.randomDelay(500, 1200));
-      await page.fill('input[name="password"]', account.password);
-      await this.sleep(this.randomDelay(800, 1500));
-
-      await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 }).catch(() => {}),
-        page.click('button[type="submit"]')
-      ]);
-
-      await this.sleep(this.randomDelay(3000, 5000));
-
-      // Salva a nova sessão no disco
-      await context.storageState({ path: account.sessionFile });
-      console.log(`💾 [TargetScraper] Sessão salva com sucesso em: ${account.sessionFile}`);
+    if (loginField || currentUrl.includes('/accounts/login') || currentUrl.includes('/challenge')) {
+      console.error(`🚨 [TargetScraper] Sessão de @${account.username} expirou ou foi invalidada.`);
+      try {
+        db.updateInstagramAccountStatus(account.id, 'needs_auth');
+      } catch (_) {}
+      throw new Error(`Sessão da conta @${account.username} expirou (status 'needs_auth'). Importe um novo cookie sessionid no painel web.`);
     }
+
+    console.log(`✅ [TargetScraper] Sessão autenticada validada para @${account.username}.`);
   }
 
   /**

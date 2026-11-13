@@ -1,5 +1,35 @@
 import { chromium } from 'playwright';
+import axios from 'axios';
 import { settings } from '../../../config/settings.js';
+
+function extractInstagramHandle(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  const match = rawUrl.match(/instagram\.com\/([a-zA-Z0-9._]+)/i);
+  if (!match) return null;
+  const handle = match[1].toLowerCase().replace(/^@/, '').trim();
+  const ignored = ['p', 'reel', 'reels', 'stories', 'explore', 'direct', 'accounts', 'developer', 'about', 'legal', 'privacy', 'help'];
+  if (ignored.includes(handle) || handle.length < 2) return null;
+  return `@${handle}`;
+}
+
+async function findInstagramOnWebsite(websiteUrl) {
+  if (!websiteUrl || typeof websiteUrl !== 'string') return null;
+  try {
+    const res = await axios.get(websiteUrl, {
+      timeout: 3500,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
+      },
+      maxRedirects: 3
+    });
+    const html = typeof res.data === 'string' ? res.data : '';
+    const match = html.match(/https?:\/\/(?:www\.)?instagram\.com\/([a-zA-Z0-9._]+)/i);
+    if (match) {
+      return extractInstagramHandle(match[0]);
+    }
+  } catch (_) {}
+  return null;
+}
 
 class GoogleMapsScraper {
   async sleep(ms) {
@@ -247,11 +277,28 @@ class GoogleMapsScraper {
             }
           }
 
+          // Extração de Perfil do Instagram (no card do Maps ou no Website oficial)
+          let instagramUsername = null;
+          try {
+            const igEl = await page.$(
+              'a[href*="instagram.com/"], a[aria-label*="Instagram" i], a[data-item-id*="instagram"]'
+            );
+            if (igEl) {
+              const href = await igEl.getAttribute('href');
+              instagramUsername = extractInstagramHandle(href);
+            }
+          } catch (_) {}
+
+          if (!instagramUsername && website) {
+            instagramUsername = await findInstagramOnWebsite(website);
+          }
+
           const businessData = {
             companyName,
             rawPhone,
             address,
             website,
+            instagramUsername, // @username se encontrado
             rating,
             reviewsCount, // null se não houver no Maps (sem valores fictícios)
             niche: searchQuery,
@@ -260,7 +307,8 @@ class GoogleMapsScraper {
 
           extractedBusinesses.push(businessData);
           const reviewDisplay = reviewsCount ? `(${reviewsCount} reviews)` : '(sem reviews visíveis)';
-          console.log(`🏢 [MapsScraper] [${i + 1}/${feedCardsData.length}] ${companyName} | Fone: ${rawPhone || 'S/N'} | Nota: ${rating ? rating + ' ★' : 'S/N'} ${reviewDisplay}`);
+          const igDisplay = instagramUsername ? `| IG: ${instagramUsername}` : '';
+          console.log(`🏢 [MapsScraper] [${i + 1}/${feedCardsData.length}] ${companyName} | Fone: ${rawPhone || 'S/N'} ${igDisplay} | Nota: ${rating ? rating + ' ★' : 'S/N'} ${reviewDisplay}`);
 
         } catch (itemErr) {
           console.warn(`⚠️ [MapsScraper] Erro ao extrair item [${i + 1}]: ${itemErr.message}`);
