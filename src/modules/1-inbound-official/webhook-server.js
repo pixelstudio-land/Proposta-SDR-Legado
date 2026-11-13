@@ -296,6 +296,94 @@ let outboundTaskState = {
   error: null
 };
 
+// ============================================================================
+// SISTEMA DE AUTENTICAÇÃO DO PAINEL OPERACIONAL (ADMIN_PASSWORD)
+// ============================================================================
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || settings.server.adminPassword || 'legado123';
+const activeAdminTokens = new Set();
+
+function generateAdminToken() {
+  const token = 'adm_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+  activeAdminTokens.add(token);
+  return token;
+}
+
+function checkAdminAuth(req) {
+  const authHeader = req.headers['authorization'];
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+  const customHeader = req.headers['x-admin-token'];
+  const cookieHeader = req.headers['cookie'] || '';
+  const cookieMatch = cookieHeader.match(/admin_token=([^;\s]+)/);
+  const cookieToken = cookieMatch ? cookieMatch[1] : null;
+
+  const token = bearerToken || customHeader || cookieToken;
+
+  if (token && activeAdminTokens.has(token)) {
+    return true;
+  }
+  // Permite token direto igual à senha para facilidade de integrações/CLI
+  if (customHeader === ADMIN_PASSWORD || bearerToken === ADMIN_PASSWORD) {
+    return true;
+  }
+  return false;
+}
+
+function requireDashboardAuth(req, res, next) {
+  if (checkAdminAuth(req)) {
+    return next();
+  }
+  return res.status(401).json({
+    success: false,
+    require_auth: true,
+    error: 'Acesso restrito. Faça login com a senha de administrador.'
+  });
+}
+
+/**
+ * POST /api/auth/login
+ * Autentica com ADMIN_PASSWORD
+ */
+app.post('/api/auth/login', (req, res) => {
+  const { password } = req.body || {};
+  const expectedPassword = process.env.ADMIN_PASSWORD || settings.server.adminPassword || 'legado123';
+
+  if (password && String(password).trim() === expectedPassword) {
+    const token = generateAdminToken();
+    res.setHeader('Set-Cookie', `admin_token=${token}; Path=/; SameSite=Lax; Max-Age=2592000`);
+    appendLog('system', 'Login administrativo efetuado com sucesso no painel.', 'success');
+    return res.status(200).json({ success: true, token });
+  }
+
+  appendLog('system', 'Tentativa de login administrativo com senha incorreta.', 'warn');
+  return res.status(401).json({ success: false, error: 'Senha incorreta.' });
+});
+
+/**
+ * GET /api/auth/verify
+ * Verifica se a sessão do administrador continua ativa
+ */
+app.get('/api/auth/verify', (req, res) => {
+  if (checkAdminAuth(req)) {
+    return res.status(200).json({ success: true, authenticated: true });
+  }
+  return res.status(401).json({ success: false, authenticated: false });
+});
+
+/**
+ * POST /api/auth/logout
+ * Encerra sessão do painel
+ */
+app.post('/api/auth/logout', (req, res) => {
+  const token = req.headers['x-admin-token'];
+  if (token) activeAdminTokens.delete(token);
+  res.setHeader('Set-Cookie', 'admin_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+  return res.status(200).json({ success: true });
+});
+
+// Proteção das rotas operacionais do painel (mantendo /api/inbound/webhook e /health públicos)
+app.use('/api/dashboard', requireDashboardAuth);
+app.use('/api/whatsapp', requireDashboardAuth);
+
 /**
  * GET /api/dashboard/logs
  * Retorna os logs reais recentes do buffer de memória
@@ -608,7 +696,14 @@ app.post('/api/dashboard/accounts/:id/login', async (req, res) => {
   try {
     const launchOptions = {
       headless: false,
-      args: ['--start-maximized', '--disable-blink-features=AutomationControlled']
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--start-maximized',
+        '--disable-blink-features=AutomationControlled'
+      ]
     };
 
     if (account.proxy) {
@@ -704,19 +799,32 @@ app.post('/api/dashboard/accounts/:id/login', async (req, res) => {
 
 /**
  * GET /api/dashboard/config
- * Retorna as credenciais e configurações salvas no .env
+ * Retorna as credenciais e configurações salvas no SQLite / .env
  */
 app.get('/api/dashboard/config', (req, res) => {
   try {
+    const rawOpenAiKey = db.getSetting('openai_api_key') || process.env.OPENAI_API_KEY || '';
+    const maskedOpenAiKey = rawOpenAiKey && rawOpenAiKey.length > 8
+      ? (rawOpenAiKey.slice(0, 7) + '...' + rawOpenAiKey.slice(-4))
+      : rawOpenAiKey;
+
+    const currentPitch = db.getSetting('whatsapp_pitch_template') || whatsappDispatcher.pitchTemplate;
+    const currentMinDelay = Number(db.getSetting('whatsapp_min_delay')) || whatsappDispatcher.minDelaySeconds || 60;
+    const currentMaxDelay = Number(db.getSetting('whatsapp_max_delay')) || whatsappDispatcher.maxDelaySeconds || 120;
+    const sdrPhone = db.getSetting('sdr_notification_phone') || process.env.SDR_NOTIFICATION_PHONE || settings.whatsapp.sdrNotificationPhone || '';
+    const crmUrl = db.getSetting('crm_webhook_url') || process.env.CRM_WEBHOOK_URL || settings.crm.webhookUrl || '';
+    const crmKey = db.getSetting('crm_api_key') || process.env.CRM_API_BEARER_TOKEN || settings.crm.bearerToken || '';
+
     return res.status(200).json({
       success: true,
       config: {
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY ? (process.env.OPENAI_API_KEY.slice(0, 7) + '...' + process.env.OPENAI_API_KEY.slice(-4)) : '',
-        WA_API_URL: process.env.WA_API_URL || settings.integrations.evolutionApi.baseUrl || '',
-        WA_API_KEY: process.env.WA_API_KEY || settings.integrations.evolutionApi.apiKey || '',
-        WA_INSTANCE_NAME: process.env.WA_INSTANCE_NAME || settings.integrations.evolutionApi.instanceName || '',
-        SDR_NOTIFICATION_PHONE: process.env.SDR_NOTIFICATION_PHONE || settings.integrations.whatsapp.sdrNotificationPhone || '',
-        CRM_WEBHOOK_URL: process.env.CRM_WEBHOOK_URL || settings.integrations.crm.webhookUrl || ''
+        OPENAI_API_KEY: maskedOpenAiKey,
+        SDR_NOTIFICATION_PHONE: sdrPhone,
+        CRM_WEBHOOK_URL: crmUrl,
+        CRM_API_KEY: crmKey,
+        WHATSAPP_PITCH_TEMPLATE: currentPitch,
+        WHATSAPP_MIN_DELAY: currentMinDelay,
+        WHATSAPP_MAX_DELAY: currentMaxDelay
       }
     });
   } catch (err) {
@@ -726,12 +834,51 @@ app.get('/api/dashboard/config', (req, res) => {
 
 /**
  * POST /api/dashboard/config
- * Atualiza as variáveis de ambiente no arquivo .env e em memória
+ * Atualiza configurações no SQLite (app_settings) e no arquivo .env
  */
 app.post('/api/dashboard/config', (req, res) => {
   try {
-    const { OPENAI_API_KEY, WA_API_URL, WA_API_KEY, WA_INSTANCE_NAME, SDR_NOTIFICATION_PHONE, CRM_WEBHOOK_URL } = req.body;
+    const {
+      OPENAI_API_KEY,
+      SDR_NOTIFICATION_PHONE,
+      CRM_WEBHOOK_URL,
+      CRM_API_KEY,
+      WHATSAPP_PITCH_TEMPLATE,
+      WHATSAPP_MIN_DELAY,
+      WHATSAPP_MAX_DELAY
+    } = req.body || {};
 
+    // 1. Grava no SQLite (app_settings)
+    if (OPENAI_API_KEY && !String(OPENAI_API_KEY).includes('...')) {
+      db.setSetting('openai_api_key', OPENAI_API_KEY.trim());
+    }
+    if (SDR_NOTIFICATION_PHONE !== undefined) {
+      db.setSetting('sdr_notification_phone', String(SDR_NOTIFICATION_PHONE).trim());
+    }
+    if (CRM_WEBHOOK_URL !== undefined) {
+      db.setSetting('crm_webhook_url', String(CRM_WEBHOOK_URL).trim());
+    }
+    if (CRM_API_KEY !== undefined) {
+      db.setSetting('crm_api_key', String(CRM_API_KEY).trim());
+    }
+    if (WHATSAPP_PITCH_TEMPLATE !== undefined) {
+      db.setSetting('whatsapp_pitch_template', String(WHATSAPP_PITCH_TEMPLATE).trim());
+    }
+    if (WHATSAPP_MIN_DELAY !== undefined) {
+      db.setSetting('whatsapp_min_delay', parseInt(WHATSAPP_MIN_DELAY, 10));
+    }
+    if (WHATSAPP_MAX_DELAY !== undefined) {
+      db.setSetting('whatsapp_max_delay', parseInt(WHATSAPP_MAX_DELAY, 10));
+    }
+
+    // 2. Atualiza parâmetros do despachador WhatsApp em tempo de execução
+    whatsappDispatcher.updateConfig({
+      minDelaySeconds: WHATSAPP_MIN_DELAY,
+      maxDelaySeconds: WHATSAPP_MAX_DELAY,
+      pitchTemplate: WHATSAPP_PITCH_TEMPLATE
+    });
+
+    // 3. Atualiza arquivo .env para manter sincronização com a VPS
     const envPath = path.resolve('.env');
     let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
 
@@ -748,34 +895,18 @@ app.post('/api/dashboard/config', (req, res) => {
       process.env[name] = value;
     };
 
-    updateEnvVar('OPENAI_API_KEY', OPENAI_API_KEY);
-    updateEnvVar('WA_API_URL', WA_API_URL);
-    updateEnvVar('WA_API_KEY', WA_API_KEY);
-    updateEnvVar('WA_INSTANCE_NAME', WA_INSTANCE_NAME);
-    updateEnvVar('SDR_NOTIFICATION_PHONE', SDR_NOTIFICATION_PHONE);
-    updateEnvVar('CRM_WEBHOOK_URL', CRM_WEBHOOK_URL);
+    if (OPENAI_API_KEY && !String(OPENAI_API_KEY).includes('...')) updateEnvVar('OPENAI_API_KEY', OPENAI_API_KEY.trim());
+    if (SDR_NOTIFICATION_PHONE !== undefined) updateEnvVar('SDR_NOTIFICATION_PHONE', SDR_NOTIFICATION_PHONE);
+    if (CRM_WEBHOOK_URL !== undefined) updateEnvVar('CRM_WEBHOOK_URL', CRM_WEBHOOK_URL);
+    if (CRM_API_KEY !== undefined) updateEnvVar('CRM_API_BEARER_TOKEN', CRM_API_KEY);
 
     fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
 
-    // Atualiza settings em memória
-    if (settings.whatsapp) {
-      if (WA_API_URL) settings.whatsapp.apiUrl = WA_API_URL;
-      if (WA_API_KEY) settings.whatsapp.apiKey = WA_API_KEY;
-      if (WA_INSTANCE_NAME) settings.whatsapp.instanceName = WA_INSTANCE_NAME;
-      if (SDR_NOTIFICATION_PHONE) settings.whatsapp.sdrNotificationPhone = SDR_NOTIFICATION_PHONE;
-    }
-    if (settings.crm && CRM_WEBHOOK_URL) {
-      settings.crm.webhookUrl = CRM_WEBHOOK_URL;
-    }
-    if (settings.ai && OPENAI_API_KEY && !String(OPENAI_API_KEY).includes('...')) {
-      settings.ai.openaiApiKey = OPENAI_API_KEY;
-    }
-
-    appendLog('system', 'Credenciais e integrações (.env) atualizadas.', 'success');
+    appendLog('system', 'Configurações operacionais salvas no SQLite e .env com sucesso.', 'success');
 
     return res.status(200).json({
       success: true,
-      message: 'Configurações salvas e aplicadas em memória com sucesso!'
+      message: 'Configurações salvas no SQLite e aplicadas com sucesso!'
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });

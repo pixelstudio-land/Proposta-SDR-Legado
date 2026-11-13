@@ -9,6 +9,7 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { settings } from '../../config/settings.js';
+import db from '../database/db.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -375,11 +376,12 @@ export async function sendNativeTextMessage(phone, text) {
  * Envia a ficha executiva do lead qualificado diretamente para o WhatsApp do SDR / Leo
  */
 export async function sendSdrAlert(leadData) {
-  const sdrPhone = settings.whatsapp.sdrNotificationPhone;
+  const configuredPhone = db.getSetting('sdr_notification_phone') || settings.whatsapp.sdrNotificationPhone || '';
+  const sdrPhone = String(configuredPhone).replace(/\D/g, '');
   if (!sdrPhone) {
     return {
       success: false,
-      error: 'SDR_NOTIFICATION_PHONE não configurado no .env'
+      error: 'WhatsApp do SDR não configurado. Defina o número nas Configurações do painel.'
     };
   }
 

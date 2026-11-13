@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { settings } from '../../config/settings.js';
+import db from '../database/db.js';
 
 class CrmIntegrationClient {
   constructor() {
@@ -11,10 +12,13 @@ class CrmIntegrationClient {
    * Envia o lead qualificado em tempo real para o CRM configurado via Webhook HTTP POST
    */
   async sendLeadToCrm(leadData) {
-    if (!this.webhookUrl) {
+    const targetUrl = db.getSetting('crm_webhook_url') || this.webhookUrl || settings.crm.webhookUrl;
+    const targetToken = db.getSetting('crm_api_key') || this.bearerToken || settings.crm.bearerToken;
+
+    if (!targetUrl) {
       return {
         success: false,
-        error: 'CRM_WEBHOOK_URL não configurada no .env'
+        error: 'CRM_WEBHOOK_URL não configurada nas Configurações do painel ou .env'
       };
     }
 
@@ -39,12 +43,12 @@ class CrmIntegrationClient {
       'User-Agent': 'Legado-SDR-Engine/1.0'
     };
 
-    if (this.bearerToken) {
-      headers['Authorization'] = `Bearer ${this.bearerToken}`;
+    if (targetToken) {
+      headers['Authorization'] = `Bearer ${targetToken}`;
     }
 
     try {
-      const response = await axios.post(this.webhookUrl, payload, {
+      const response = await axios.post(targetUrl, payload, {
         headers,
         timeout: 8000
       });

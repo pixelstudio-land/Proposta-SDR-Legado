@@ -66,6 +66,13 @@ CREATE TABLE IF NOT EXISTS instagram_accounts (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
+-- 6. Configurações Dinâmicas da Operação (Persistência no SQLite)
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Índices de Alta Performance
 CREATE INDEX IF NOT EXISTS idx_leads_identifier ON leads(identifier);
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);

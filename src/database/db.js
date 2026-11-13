@@ -26,6 +26,14 @@ class AppDatabase {
       const schemaSql = fs.readFileSync(settings.database.schemaPath, 'utf8');
       this.db.exec(schemaSql);
     }
+    // Garante existência da tabela de configurações
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
   }
 
   prepareStatements() {
@@ -351,6 +359,46 @@ class AppDatabase {
     if (!id) return false;
     this.stmtDeleteAccount.run(Number(id));
     return true;
+  }
+
+  // ============================================================================
+  // CONFIGURAÇÕES DINÂMICAS (PERSISTIDAS NO SQLITE)
+  // ============================================================================
+  getSetting(key, defaultValue = null) {
+    try {
+      const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(String(key));
+      return (row && row.value !== null && row.value !== undefined) ? row.value : defaultValue;
+    } catch {
+      return defaultValue;
+    }
+  }
+
+  setSetting(key, value) {
+    try {
+      const valStr = value === null || value === undefined ? '' : String(value);
+      this.db.prepare(`
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP
+      `).run(String(key), valStr);
+      return true;
+    } catch (err) {
+      console.error(`Erro ao salvar setting [${key}] no SQLite:`, err.message);
+      return false;
+    }
+  }
+
+  getAllSettings() {
+    try {
+      const rows = this.db.prepare('SELECT key, value FROM app_settings').all();
+      const result = {};
+      for (const r of rows) {
+        result[r.key] = r.value;
+      }
+      return result;
+    } catch {
+      return {};
+    }
   }
 
   close() {

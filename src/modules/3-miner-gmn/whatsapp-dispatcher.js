@@ -5,8 +5,11 @@ class WhatsAppAutoDispatcher {
   constructor() {
     this.isRunning = false;
     this.timerId = null;
-    this.minDelaySeconds = 60;
-    this.maxDelaySeconds = 120;
+
+    const savedMinDelay = db.getSetting('whatsapp_min_delay');
+    const savedMaxDelay = db.getSetting('whatsapp_max_delay');
+    this.minDelaySeconds = savedMinDelay ? parseInt(savedMinDelay, 10) : 60;
+    this.maxDelaySeconds = savedMaxDelay ? parseInt(savedMaxDelay, 10) : 120;
     this.dailyLimit = 50;
     this.lastSentAt = null;
     this.nextRunAt = null;
@@ -20,7 +23,8 @@ Acompanho o mercado de {nicho} e desenvolvemos uma operação comercial com IA p
 
 Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria para a {empresa}?`;
 
-    this.pitchTemplate = this.defaultTemplate;
+    const savedTemplate = db.getSetting('whatsapp_pitch_template');
+    this.pitchTemplate = savedTemplate || this.defaultTemplate;
   }
 
   /**
@@ -94,6 +98,14 @@ Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria p
     const sentToday = this.getSentTodayCount();
     const pendingCount = this.getPendingLeadsCount();
 
+    // Sincroniza dinamicamente com SQLite caso tenha sido alterado via painel
+    const savedTemplate = db.getSetting('whatsapp_pitch_template');
+    if (savedTemplate) this.pitchTemplate = savedTemplate;
+    const savedMinDelay = db.getSetting('whatsapp_min_delay');
+    if (savedMinDelay) this.minDelaySeconds = parseInt(savedMinDelay, 10);
+    const savedMaxDelay = db.getSetting('whatsapp_max_delay');
+    if (savedMaxDelay) this.maxDelaySeconds = parseInt(savedMaxDelay, 10);
+
     return {
       isRunning: this.isRunning,
       isWhatsappConnected: isNativeConnected(),
@@ -111,13 +123,24 @@ Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria p
   }
 
   /**
-   * Atualiza as configurações de delay, teto e template
+   * Atualiza as configurações de delay, teto e template (com persistência no SQLite)
    */
   updateConfig({ minDelaySeconds, maxDelaySeconds, dailyLimit, pitchTemplate } = {}) {
-    if (minDelaySeconds !== undefined) this.minDelaySeconds = Math.max(10, parseInt(minDelaySeconds, 10));
-    if (maxDelaySeconds !== undefined) this.maxDelaySeconds = Math.max(this.minDelaySeconds, parseInt(maxDelaySeconds, 10));
-    if (dailyLimit !== undefined) this.dailyLimit = Math.max(1, parseInt(dailyLimit, 10));
-    if (pitchTemplate && typeof pitchTemplate === 'string') this.pitchTemplate = pitchTemplate;
+    if (minDelaySeconds !== undefined) {
+      this.minDelaySeconds = Math.max(10, parseInt(minDelaySeconds, 10));
+      db.setSetting('whatsapp_min_delay', this.minDelaySeconds);
+    }
+    if (maxDelaySeconds !== undefined) {
+      this.maxDelaySeconds = Math.max(this.minDelaySeconds, parseInt(maxDelaySeconds, 10));
+      db.setSetting('whatsapp_max_delay', this.maxDelaySeconds);
+    }
+    if (dailyLimit !== undefined) {
+      this.dailyLimit = Math.max(1, parseInt(dailyLimit, 10));
+    }
+    if (pitchTemplate && typeof pitchTemplate === 'string') {
+      this.pitchTemplate = pitchTemplate;
+      db.setSetting('whatsapp_pitch_template', this.pitchTemplate);
+    }
     return this.getStatus();
   }
 
@@ -263,3 +286,4 @@ Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria p
 
 export const whatsappDispatcher = new WhatsAppAutoDispatcher();
 export default whatsappDispatcher;
+

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { settings } from '../../config/settings.js';
+import db from '../database/db.js';
 import { parser } from './parser.js';
 import { getSdrInboundSystemPrompt } from './prompts/sdr-inbound.prompt.js';
 import { getProfileAuditorPrompt } from './prompts/profile-auditor.prompt.js';
@@ -7,10 +8,18 @@ import { getColdCopywriterPrompt } from './prompts/cold-copywriter.prompt.js';
 
 class OpenAiEngine {
   constructor() {
-    this.client = new OpenAI({
-      apiKey: settings.openai.apiKey || 'sk-dummy-key-for-init'
-    });
     this.model = settings.openai.model;
+    this.currentKey = null;
+    this.client = null;
+  }
+
+  getClient() {
+    const activeKey = db.getSetting('openai_api_key') || settings.openai.apiKey || 'sk-dummy-key-for-init';
+    if (!this.client || this.currentKey !== activeKey) {
+      this.client = new OpenAI({ apiKey: activeKey });
+      this.currentKey = activeKey;
+    }
+    return this.client;
   }
 
   async sleep(ms) {
@@ -34,7 +43,8 @@ class OpenAiEngine {
 
     while (attempt < maxRetries) {
       try {
-        const response = await this.client.chat.completions.create(requestPayload);
+        const client = this.getClient();
+        const response = await client.chat.completions.create(requestPayload);
         const choice = response.choices?.[0];
         if (!choice || !choice.message) {
           throw new Error('Resposta vazia da OpenAI.');

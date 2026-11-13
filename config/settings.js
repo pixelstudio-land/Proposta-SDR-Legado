@@ -15,7 +15,8 @@ export const settings = {
     port: parseInt(process.env.PORT || '3000', 10),
     nodeEnv: process.env.NODE_ENV || 'development',
     webhookSecret: process.env.WEBHOOK_SECRET || 'default_secret',
-    manychatApiKey: process.env.MANYCHAT_API_KEY || ''
+    manychatApiKey: process.env.MANYCHAT_API_KEY || '',
+    adminPassword: process.env.ADMIN_PASSWORD || 'legado123'
   },
 
   // Motor OpenAI

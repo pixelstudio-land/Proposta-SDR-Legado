@@ -9,6 +9,38 @@ document.addEventListener('DOMContentLoaded', () => {
   let allLeads = [];
   let pollInterval = null;
 
+  // Interceptador Global de Fetch para Autenticação Administrativa
+  const originalFetch = window.fetch;
+  window.fetch = async function(...args) {
+    let [resource, config] = args;
+    config = config || {};
+    config.headers = config.headers || {};
+
+    const token = localStorage.getItem('legado_admin_token');
+    if (token) {
+      if (config.headers instanceof Headers) {
+        config.headers.set('x-admin-token', token);
+      } else {
+        config.headers['x-admin-token'] = token;
+      }
+    }
+
+    const response = await originalFetch(resource, config);
+
+    // Se a rota exigiu autenticação e falhou
+    if (response.status === 401) {
+      try {
+        const clone = response.clone();
+        const data = await clone.json();
+        if (data.require_auth) {
+          showLoginOverlay();
+        }
+      } catch {}
+    }
+
+    return response;
+  };
+
   // Iconografia SVG Inline Oficial (Lucide Style - Strict Zero Emojis)
   const icons = {
     star: `<svg class="icon-star-gold" width="13" height="13" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`,
@@ -114,18 +146,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const accountsBadgeCount = document.getElementById('accountsBadgeCount');
   const btnRefreshAccounts = document.getElementById('btnRefreshAccounts');
 
-  // Aba 2: APIs
+  // Aba 2: APIs & Parâmetros Operacionais
   const formApiSettings = document.getElementById('formApiSettings');
   const cfgOpenAiKey = document.getElementById('cfgOpenAiKey');
-  const cfgWaUrl = document.getElementById('cfgWaUrl');
-  const cfgWaKey = document.getElementById('cfgWaKey');
-  const cfgWaInstance = document.getElementById('cfgWaInstance');
   const cfgSdrPhone = document.getElementById('cfgSdrPhone');
   const cfgCrmWebhook = document.getElementById('cfgCrmWebhook');
+  const cfgCrmApiKey = document.getElementById('cfgCrmApiKey');
+  const cfgWaMinDelay = document.getElementById('cfgWaMinDelay');
+  const cfgWaMaxDelay = document.getElementById('cfgWaMaxDelay');
+  const cfgWaPitchTemplate = document.getElementById('cfgWaPitchTemplate');
   const btnSaveConfig = document.getElementById('btnSaveConfig');
   const configFeedback = document.getElementById('configFeedback');
   const btnValidateLeadsWa = document.getElementById('btnValidateLeadsWa');
   const waValidationFeedback = document.getElementById('waValidationFeedback');
+
+  // Elementos do DOM - Login & Logout
+  const loginOverlay = document.getElementById('loginOverlay');
+  const formLogin = document.getElementById('formLogin');
+  const loginPassword = document.getElementById('loginPassword');
+  const btnLoginSubmit = document.getElementById('btnLoginSubmit');
+  const btnLoginText = document.getElementById('btnLoginText');
+  const loginFeedback = document.getElementById('loginFeedback');
+  const btnLogout = document.getElementById('btnLogout');
 
   // Elementos do DOM - WhatsApp Nativo (Baileys)
   const btnWaIndicator = document.getElementById('btnWaIndicator');
@@ -931,7 +973,7 @@ document.addEventListener('DOMContentLoaded', () => {
   btnRefreshAccounts.addEventListener('click', loadAccounts);
 
   // ============================================================================
-  // 7. CONFIGURAÇÕES DE APIS & INTEGRAÇÕES (.ENV)
+  // 7. CONFIGURAÇÕES DE APIS, CRON & TEMPLATES (SQLITE & .ENV)
   // ============================================================================
   async function loadConfig() {
     try {
@@ -941,11 +983,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const c = data.config;
       if (c.OPENAI_API_KEY) cfgOpenAiKey.value = c.OPENAI_API_KEY;
-      if (c.WA_API_URL) cfgWaUrl.value = c.WA_API_URL;
-      if (c.WA_API_KEY) cfgWaKey.value = c.WA_API_KEY;
-      if (c.WA_INSTANCE_NAME) cfgWaInstance.value = c.WA_INSTANCE_NAME;
       if (c.SDR_NOTIFICATION_PHONE) cfgSdrPhone.value = c.SDR_NOTIFICATION_PHONE;
       if (c.CRM_WEBHOOK_URL) cfgCrmWebhook.value = c.CRM_WEBHOOK_URL;
+      if (cfgCrmApiKey && c.CRM_API_KEY) cfgCrmApiKey.value = c.CRM_API_KEY;
+      if (cfgWaMinDelay && c.WHATSAPP_MIN_DELAY) cfgWaMinDelay.value = c.WHATSAPP_MIN_DELAY;
+      if (cfgWaMaxDelay && c.WHATSAPP_MAX_DELAY) cfgWaMaxDelay.value = c.WHATSAPP_MAX_DELAY;
+      if (cfgWaPitchTemplate && c.WHATSAPP_PITCH_TEMPLATE) cfgWaPitchTemplate.value = c.WHATSAPP_PITCH_TEMPLATE;
     } catch (err) {
       console.error('Erro ao carregar configurações:', err);
     }
@@ -954,16 +997,17 @@ document.addEventListener('DOMContentLoaded', () => {
   formApiSettings.addEventListener('submit', async (e) => {
     e.preventDefault();
     btnSaveConfig.disabled = true;
-    configFeedback.textContent = 'Gravando variáveis no arquivo .env...';
+    configFeedback.textContent = 'Gravando parâmetros no SQLite e .env...';
     configFeedback.className = 'feedback-text';
 
     const payload = {
       OPENAI_API_KEY: cfgOpenAiKey.value.trim(),
-      WA_API_URL: cfgWaUrl.value.trim(),
-      WA_API_KEY: cfgWaKey.value.trim(),
-      WA_INSTANCE_NAME: cfgWaInstance.value.trim(),
       SDR_NOTIFICATION_PHONE: cfgSdrPhone.value.trim(),
-      CRM_WEBHOOK_URL: cfgCrmWebhook.value.trim()
+      CRM_WEBHOOK_URL: cfgCrmWebhook.value.trim(),
+      CRM_API_KEY: cfgCrmApiKey ? cfgCrmApiKey.value.trim() : '',
+      WHATSAPP_MIN_DELAY: cfgWaMinDelay ? parseInt(cfgWaMinDelay.value, 10) : 60,
+      WHATSAPP_MAX_DELAY: cfgWaMaxDelay ? parseInt(cfgWaMaxDelay.value, 10) : 120,
+      WHATSAPP_PITCH_TEMPLATE: cfgWaPitchTemplate ? cfgWaPitchTemplate.value.trim() : ''
     };
 
     try {
@@ -981,9 +1025,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      configFeedback.textContent = 'Configurações salvas no .env e atualizadas em memória com sucesso!';
+      configFeedback.textContent = 'Configurações salvas no SQLite e .env com sucesso!';
       configFeedback.className = 'feedback-text success';
       btnSaveConfig.disabled = false;
+
+      await loadWaDispatcherStatus();
 
     } catch (err) {
       configFeedback.textContent = `Erro de conexão: ${err.message}`;
@@ -1519,20 +1565,125 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/'/g, '&#039;');
   }
 
-  // Inicialização do Painel
-  loadStats();
-  loadLeads();
-  loadExports();
-  pollLogs();
-  fetchWhatsAppStatus();
-  loadWaDispatcherStatus();
+  // ============================================================================
+  // AUTENTICAÇÃO DO PAINEL OPERACIONAL (ADMIN_PASSWORD)
+  // ============================================================================
+  function showLoginOverlay() {
+    if (!loginOverlay) return;
+    loginOverlay.classList.remove('hidden');
+    if (loginPassword) {
+      loginPassword.value = '';
+      setTimeout(() => loginPassword.focus(), 150);
+    }
+  }
 
-  // Loop de polling de heartbeat (logs, stats, status WhatsApp e dispatcher a cada 3s)
-  setInterval(() => {
-    loadStats();
-    pollLogs();
-    fetchWhatsAppStatus();
-    loadWaDispatcherStatus();
-  }, 3000);
+  function hideLoginOverlay() {
+    if (!loginOverlay) return;
+    loginOverlay.classList.add('hidden');
+  }
+
+  if (formLogin) {
+    formLogin.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const password = loginPassword.value.trim();
+      if (!password) return;
+
+      btnLoginSubmit.disabled = true;
+      loginFeedback.textContent = 'Verificando credenciais...';
+      loginFeedback.className = 'feedback-text';
+
+      try {
+        const res = await originalFetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password })
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+          loginFeedback.textContent = data.error || 'Senha incorreta.';
+          loginFeedback.className = 'feedback-text error';
+          btnLoginSubmit.disabled = false;
+          return;
+        }
+
+        loginFeedback.textContent = 'Autenticado com sucesso!';
+        loginFeedback.className = 'feedback-text success';
+        localStorage.setItem('legado_admin_token', data.token);
+
+        setTimeout(() => {
+          hideLoginOverlay();
+          btnLoginSubmit.disabled = false;
+          loginFeedback.textContent = '';
+          // Carrega painel
+          loadStats();
+          loadLeads();
+          loadExports();
+          pollLogs();
+          fetchWhatsAppStatus();
+          loadWaDispatcherStatus();
+        }, 400);
+
+      } catch (err) {
+        loginFeedback.textContent = `Erro de conexão: ${err.message}`;
+        loginFeedback.className = 'feedback-text error';
+        btnLoginSubmit.disabled = false;
+      }
+    });
+  }
+
+  if (btnLogout) {
+    btnLogout.addEventListener('click', async () => {
+      if (!confirm('Deseja encerrar a sessão do painel operacional?')) return;
+      try {
+        await originalFetch('/api/auth/logout', { method: 'POST' });
+      } catch {}
+      localStorage.removeItem('legado_admin_token');
+      showLoginOverlay();
+    });
+  }
+
+  // Inicialização com Verificação de Autenticação
+  async function checkInitialAuth() {
+    const token = localStorage.getItem('legado_admin_token');
+    if (!token) {
+      showLoginOverlay();
+      return;
+    }
+
+    try {
+      const res = await originalFetch('/api/auth/verify', {
+        headers: { 'x-admin-token': token }
+      });
+      const data = await res.json();
+      if (!res.ok || !data.authenticated) {
+        showLoginOverlay();
+        return;
+      }
+
+      // Autenticado com sucesso
+      hideLoginOverlay();
+      loadStats();
+      loadLeads();
+      loadExports();
+      pollLogs();
+      fetchWhatsAppStatus();
+      loadWaDispatcherStatus();
+
+      // Loop de polling de heartbeat a cada 3s (somente se autenticado)
+      setInterval(() => {
+        if (loginOverlay && !loginOverlay.classList.contains('hidden')) return;
+        loadStats();
+        pollLogs();
+        fetchWhatsAppStatus();
+        loadWaDispatcherStatus();
+      }, 3000);
+
+    } catch {
+      showLoginOverlay();
+    }
+  }
+
+  checkInitialAuth();
 });
 
