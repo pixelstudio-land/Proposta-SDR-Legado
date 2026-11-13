@@ -11,6 +11,9 @@ package-lock.json
 config/*.sqlite
 config/*.sqlite-shm
 config/*.sqlite-wal
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
 
 # Sessões e cookies de contas do Playwright (mantém apenas .gitkeep)
 data/sessions/*.json

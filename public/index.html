@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=4">
 </head>
 <body>
   <!-- Top Navigation Bar -->
@@ -381,6 +381,7 @@
             <option value="new">Novo (new)</option>
             <option value="in_qualification">Em Triagem</option>
             <option value="qualified">Qualificado (ICP)</option>
+            <option value="no_whatsapp">Sem WhatsApp</option>
             <option value="disqualified">Desqualificado</option>
           </select>
 
@@ -609,14 +610,25 @@
                   <label for="accPassword" class="form-label">Senha (Opcional se colar Sessão)</label>
                   <input type="password" id="accPassword" class="form-input" placeholder="••••••••••••" autocomplete="new-password">
                 </div>
-                <div class="form-field span-2">
-                  <label for="accSessionCookie" class="form-label">Cookie sessionid ou JSON de Sessão (Recomendado &bull; Ativa sem Bloqueio)</label>
-                  <input type="text" id="accSessionCookie" class="form-input font-mono" placeholder="Cole o cookie sessionid ou o JSON do StorageState">
-                </div>
-                <div class="form-field span-2">
-                  <label for="accProxy" class="form-label">Proxy Dedicado (Opcional)</label>
-                  <input type="text" id="accProxy" class="form-input font-mono" placeholder="http://usuario:senha@ip:porta" autocomplete="off">
-                </div>
+                <details class="span-2 advanced-account-details" style="margin-top: 4px;">
+                  <summary class="advanced-account-summary">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="3"></circle>
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span>Opções avançadas de conexão (Cookie / Proxy)</span>
+                  </summary>
+                  <div class="settings-grid" style="margin-top: 10px;">
+                    <div class="form-field span-2">
+                      <label for="accSessionCookie" class="form-label">Cookie sessionid ou JSON de Sessão (Recomendado &bull; Ativa sem Bloqueio)</label>
+                      <input type="text" id="accSessionCookie" class="form-input font-mono" placeholder="Cole o cookie sessionid ou o JSON do StorageState">
+                    </div>
+                    <div class="form-field span-2">
+                      <label for="accProxy" class="form-label">Proxy Dedicado (Opcional)</label>
+                      <input type="text" id="accProxy" class="form-input font-mono" placeholder="http://usuario:senha@ip:porta" autocomplete="off">
+                    </div>
+                  </div>
+                </details>
               </div>
               <div class="settings-form-actions">
                 <button type="submit" id="btnAddAccount" class="btn btn-primary-gold btn-sm">
@@ -959,6 +971,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>

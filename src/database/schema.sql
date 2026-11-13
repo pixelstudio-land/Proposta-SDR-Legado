@@ -14,11 +14,12 @@ CREATE TABLE IF NOT EXISTS leads (
     name TEXT,
     company_name TEXT,
     phone TEXT,
-    is_whatsapp_active INTEGER DEFAULT 0,-- 1 se validado na API de WhatsApp, 0 caso contrário
+    instagram TEXT,                      -- @perfil oficial do Instagram (quando minerado do site ou fornecido)
+    is_whatsapp_active INTEGER DEFAULT 0,-- 1 se validado no Baileys, 0 se sem whatsapp, null/-1 se não verificado
     phone_type TEXT,                     -- 'landline' (fixo) ou 'mobile' (celular)
     niche TEXT,
     revenue_range TEXT,
-    status TEXT DEFAULT 'new',           -- 'new', 'in_qualification', 'qualified', 'disqualified', 'converted'
+    status TEXT DEFAULT 'new',           -- 'new', 'in_qualification', 'qualified', 'disqualified', 'converted', 'no_whatsapp', 'invalid'
     ai_summary TEXT,
     crm_synced INTEGER DEFAULT 0,        -- 1 se injetado no CRM com sucesso
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

@@ -6,10 +6,11 @@ class ProfileFilterEngine {
    * Varre os leads pendentes de outbound coletados no SQLite e aplica auditoria cognitiva via IA
    */
   async filterPendingLeads() {
-    // Busca leads com status 'new' da fonte outbound_instagram
+    // Busca leads pendentes de outbound (coletados pelo scraper de seguidores ou minerados no Maps com @instagram)
     const pendingLeads = db.db.prepare(`
       SELECT * FROM leads 
-      WHERE source = 'outbound_instagram' AND status = 'new'
+      WHERE (source = 'outbound_instagram' OR (instagram IS NOT NULL AND instagram != '')) 
+        AND status IN ('new', 'no_whatsapp')
       ORDER BY id ASC
     `).all();
 
@@ -22,21 +23,21 @@ class ProfileFilterEngine {
     };
 
     for (const lead of pendingLeads) {
-      const username = lead.identifier.replace('@', '');
+      const targetHandle = (lead.instagram || lead.identifier || '').replace('@', '').trim();
       const bioText = lead.ai_summary || '';
 
       // 1. Filtro rápido de sanidade: bio vazia ou muito curta
       if (!bioText || bioText.length < 5 || bioText === 'Sem bio informada') {
         db.updateLeadStatus(lead.id, 'disqualified', 'Descartado: biografia ausente ou insuficiente');
-        results.disqualified.push({ id: lead.id, identifier: lead.identifier, reason: 'Sem bio' });
-        console.log(`❌ [ProfileFilter] ${lead.identifier}: Desqualificado (sem bio)`);
+        results.disqualified.push({ id: lead.id, identifier: targetHandle, reason: 'Sem bio' });
+        console.log(`❌ [ProfileFilter] @${targetHandle}: Desqualificado (sem bio)`);
         continue;
       }
 
       // 2. Auditoria Cognitiva com GPT-4o-mini
       try {
-        console.log(`🤖 [ProfileFilter] Auditando bio de ${lead.identifier} via GPT-4o-mini: "${bioText.slice(0, 50)}..."`);
-        const audit = await openaiClient.auditProfileBio(bioText, username);
+        console.log(`🤖 [ProfileFilter] Auditando bio de @${targetHandle} via GPT-4o-mini: "${bioText.slice(0, 50)}..."`);
+        const audit = await openaiClient.auditProfileBio(bioText, targetHandle);
 
         if (audit.isCommercialDecisionMaker && audit.confidenceScore >= 60) {
           // Aprovado para abordagem fria

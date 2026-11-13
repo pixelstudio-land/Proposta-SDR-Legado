@@ -1196,7 +1196,7 @@ app.post('/api/dashboard/whatsapp-dispatcher/config', (req, res) => {
  */
 app.post('/api/dashboard/validate-leads-wa', async (req, res) => {
   try {
-    const unverifiedLeads = db.db.prepare('SELECT id, phone FROM leads WHERE phone IS NOT NULL AND is_whatsapp_active = 0').all();
+    const unverifiedLeads = db.db.prepare('SELECT id, phone FROM leads WHERE phone IS NOT NULL AND (is_whatsapp_active IS NULL OR is_whatsapp_active = -1 OR is_whatsapp_active = 0)').all();
 
     if (unverifiedLeads.length === 0) {
       return res.status(200).json({
@@ -1213,23 +1213,41 @@ app.post('/api/dashboard/validate-leads-wa', async (req, res) => {
     const waResults = await waChecker.validateNumbers(phoneList);
 
     let activeCount = 0;
-    const updateStmt = db.db.prepare('UPDATE leads SET is_whatsapp_active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
+    let noWaCount = 0;
+    const updateActiveStmt = db.db.prepare(`
+      UPDATE leads 
+      SET is_whatsapp_active = 1, 
+          status = CASE WHEN status = 'no_whatsapp' OR status = 'new' THEN 'in_qualification' ELSE status END, 
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `);
+    const updateNoWaStmt = db.db.prepare(`
+      UPDATE leads 
+      SET is_whatsapp_active = 0, 
+          status = 'no_whatsapp', 
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `);
 
     for (const lead of unverifiedLeads) {
       const resItem = waResults.get(lead.phone);
       if (resItem && resItem.exists) {
-        updateStmt.run(lead.id);
+        updateActiveStmt.run(lead.id);
         activeCount++;
+      } else if (resItem && !resItem.exists) {
+        updateNoWaStmt.run(lead.id);
+        noWaCount++;
       }
     }
 
-    appendLog('miner', `Validação concluída: ${activeCount} novos números de WhatsApp ativos confirmados.`, 'success');
+    appendLog('miner', `Validação concluída: ${activeCount} ativos confirmados e ${noWaCount} sem WhatsApp.`, 'success');
 
     return res.status(200).json({
       success: true,
-      message: `Validação concluída: ${activeCount} números ativos confirmados de ${unverifiedLeads.length} testados.`,
+      message: `Validação concluída: ${activeCount} ativos e ${noWaCount} sem WhatsApp de ${unverifiedLeads.length} testados.`,
       checkedCount: unverifiedLeads.length,
-      activeCount
+      activeCount,
+      noWaCount
     });
 
   } catch (err) {

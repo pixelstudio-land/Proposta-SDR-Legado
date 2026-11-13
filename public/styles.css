@@ -894,6 +894,11 @@ input:-webkit-autofill:active {
   color: var(--emerald);
   border: 1px solid var(--emerald-border);
 }
+.badge-ui.wa-none {
+  background: rgba(239, 68, 68, 0.08);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
 .badge-ui.wa-inactive {
   background: #18181b;
   color: var(--text-muted);
@@ -1170,6 +1175,8 @@ input:-webkit-autofill:active {
   font-weight: 500;
   cursor: pointer;
   transition: var(--transition);
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
 }
 .modal-tab-btn:hover {
   color: var(--text-primary);
@@ -1178,6 +1185,43 @@ input:-webkit-autofill:active {
   color: var(--gold);
   border-bottom-color: var(--gold);
   font-weight: 600;
+}
+.modal-tab-btn:focus,
+.modal-tab-btn:focus-visible,
+.modal-tab-btn:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Opções Avançadas do Cadastro de Contas */
+.advanced-account-details {
+  background: #09090c;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-top: 4px;
+  transition: var(--transition);
+}
+.advanced-account-details[open] {
+  border-color: var(--border-hover);
+  background: #0d0d10;
+}
+.advanced-account-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  list-style: none;
+}
+.advanced-account-summary::-webkit-details-marker {
+  display: none;
+}
+.advanced-account-summary:hover {
+  color: var(--text-secondary);
 }
 .modal-content-tabs {
   padding: 20px;

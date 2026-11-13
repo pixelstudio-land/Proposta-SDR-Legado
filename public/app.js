@@ -66,7 +66,8 @@ document.addEventListener('DOMContentLoaded', () => {
     user: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>`,
     bot: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M12 8V4H8"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/></svg>`,
     trash: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/></svg>`,
-    login: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>`
+    login: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg>`,
+    x: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`
   };
 
   // Elementos do DOM - KPIs
@@ -423,7 +424,13 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       if (sourceFilter !== 'all' && lead.source !== sourceFilter) return false;
-      if (statusFilter !== 'all' && lead.status !== statusFilter) return false;
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'no_whatsapp') {
+          if (lead.status !== 'no_whatsapp' && lead.is_whatsapp_active !== 0) return false;
+        } else if (lead.status !== statusFilter) {
+          return false;
+        }
+      }
 
       return true;
     });
@@ -474,10 +481,20 @@ document.addEventListener('DOMContentLoaded', () => {
         </div>
       `;
 
-      // 3. WhatsApp Ativo Badge
-      const waBadge = lead.is_whatsapp_active
-        ? `<span class="badge-ui wa-active">${icons.check}<span>Ativo</span></span>`
-        : `<span class="badge-ui wa-inactive">Não verificado</span>`;
+      // 3. WhatsApp Ativo Badge (Diferenciação: Ativo, Sem WhatsApp e Não verificado)
+      let waBadge;
+      if (lead.is_whatsapp_active === 1 || lead.is_whatsapp_active === '1') {
+        waBadge = `<span class="badge-ui wa-active">${icons.check}<span>Ativo</span></span>`;
+      } else if (
+        lead.is_whatsapp_active === 0 || 
+        lead.is_whatsapp_active === '0' || 
+        lead.status === 'no_whatsapp' || 
+        lead.status === 'invalid'
+      ) {
+        waBadge = `<span class="badge-ui wa-none">${icons.x}<span>Sem WhatsApp</span></span>`;
+      } else {
+        waBadge = `<span class="badge-ui wa-inactive"><span>Não verificado</span></span>`;
+      }
 
       // 4. Avaliação Google (Uma única estrela SVG em linha)
       let ratingCell = `<span style="color: var(--text-subtle);">—</span>`;
@@ -496,15 +513,27 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
 
-      // 5. Origem Badge
-      let sourceBadge = `<span class="badge-ui">${lead.source}</span>`;
+      // 5. Origem & Canais (Google Maps + @instagram unificados sem duplicação)
+      let sourceBadges = [];
       if (lead.source === 'miner_gmn') {
-        sourceBadge = `<span class="badge-ui source-gmn">${icons.mapPin}<span>Google Maps</span></span>`;
+        sourceBadges.push(`<span class="badge-ui source-gmn">${icons.mapPin}<span>Google Maps</span></span>`);
       } else if (lead.source === 'outbound_instagram') {
-        sourceBadge = `<span class="badge-ui source-insta">${icons.instagram}<span>Instagram</span></span>`;
+        sourceBadges.push(`<span class="badge-ui source-insta">${icons.instagram}<span>Instagram</span></span>`);
       } else if (lead.source === 'inbound_official') {
-        sourceBadge = `<span class="badge-ui source-inbound">${icons.message}<span>Inbound IA</span></span>`;
+        sourceBadges.push(`<span class="badge-ui source-inbound">${icons.message}<span>Inbound IA</span></span>`);
       }
+
+      if (lead.instagram && lead.source !== 'outbound_instagram') {
+        const cleanIg = lead.instagram.replace(/^@/, '');
+        sourceBadges.push(`
+          <a href="https://instagram.com/${cleanIg}" target="_blank" rel="noopener noreferrer" class="badge-ui source-insta" title="Instagram Oficial: @${cleanIg}" style="text-decoration: none; display: inline-flex; align-items: center; gap: 4px;">
+            ${icons.instagram}
+            <span class="font-mono">@${cleanIg}</span>
+          </a>
+        `);
+      }
+
+      const sourceDisplay = `<div style="display: flex; flex-direction: column; gap: 4px; align-items: flex-start;">${sourceBadges.join('')}</div>`;
 
       // 6. Status Badge
       let statusClass = 'status-new';
@@ -518,6 +547,9 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (lead.status === 'disqualified') {
         statusClass = 'status-disqualified';
         statusText = 'Desqualificado';
+      } else if (lead.status === 'no_whatsapp') {
+        statusClass = 'status-disqualified';
+        statusText = 'Sem WhatsApp';
       }
       const statusBadge = `<span class="badge-ui ${statusClass}">${statusText}</span>`;
 
@@ -528,7 +560,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>${phoneDisplay}</td>
           <td>${waBadge}</td>
           <td>${ratingCell}</td>
-          <td>${sourceBadge}</td>
+          <td>${sourceDisplay}</td>
           <td>${statusBadge}</td>
           <td style="text-align: right; white-space: nowrap;">
             <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">

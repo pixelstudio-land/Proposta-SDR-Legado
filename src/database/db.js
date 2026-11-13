@@ -34,6 +34,15 @@ class AppDatabase {
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Migração transparente: Garante coluna 'instagram' na tabela leads
+    try {
+      const tableInfo = this.db.prepare("PRAGMA table_info(leads)").all();
+      const hasInstagram = tableInfo.some(col => col.name === 'instagram');
+      if (!hasInstagram && tableInfo.length > 0) {
+        this.db.exec("ALTER TABLE leads ADD COLUMN instagram TEXT;");
+      }
+    } catch (_) {}
   }
 
   prepareStatements() {
@@ -47,9 +56,9 @@ class AppDatabase {
 
     this.stmtInsertLead = this.db.prepare(`
       INSERT INTO leads (
-        source, identifier, name, company_name, phone, is_whatsapp_active, 
+        source, identifier, name, company_name, phone, instagram, is_whatsapp_active, 
         phone_type, niche, revenue_range, status, ai_summary, crm_synced
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     this.stmtUpdateLead = this.db.prepare(`
@@ -57,6 +66,7 @@ class AppDatabase {
         name = COALESCE(?, name),
         company_name = COALESCE(?, company_name),
         phone = COALESCE(?, phone),
+        instagram = COALESCE(?, instagram),
         is_whatsapp_active = COALESCE(?, is_whatsapp_active),
         phone_type = COALESCE(?, phone_type),
         niche = COALESCE(?, niche),
@@ -169,14 +179,32 @@ class AppDatabase {
       throw new Error('Campo identifier é obrigatório para cadastrar ou atualizar o lead.');
     }
 
-    const existing = this.getLeadByIdentifier(identifier);
+    let existing = this.getLeadByIdentifier(identifier);
+    // Se não encontrou por identifier, mas veio phone e o identifier não for telefone, busca por phone
+    if (!existing && leadData.phone) {
+      existing = this.db.prepare('SELECT * FROM leads WHERE phone = ? LIMIT 1').get(leadData.phone);
+    }
+    // Se não encontrou por identifier nem por phone, tenta por instagram
+    if (!existing && leadData.instagram) {
+      existing = this.db.prepare('SELECT * FROM leads WHERE instagram = ? OR identifier = ? LIMIT 1').get(leadData.instagram, leadData.instagram);
+    }
+
+    let waActiveVal = null;
+    if (leadData.is_whatsapp_active !== undefined && leadData.is_whatsapp_active !== null) {
+      if (leadData.is_whatsapp_active === 1 || leadData.is_whatsapp_active === '1' || leadData.is_whatsapp_active === true) {
+        waActiveVal = 1;
+      } else if (leadData.is_whatsapp_active === 0 || leadData.is_whatsapp_active === '0' || leadData.is_whatsapp_active === false || leadData.is_whatsapp_active === 'no_whatsapp' || leadData.is_whatsapp_active === 'invalid') {
+        waActiveVal = 0;
+      }
+    }
 
     if (existing) {
       this.stmtUpdateLead.run(
         leadData.name !== undefined ? leadData.name : null,
         leadData.company_name !== undefined ? leadData.company_name : null,
         leadData.phone !== undefined ? leadData.phone : null,
-        leadData.is_whatsapp_active !== undefined ? (leadData.is_whatsapp_active ? 1 : 0) : null,
+        leadData.instagram !== undefined ? leadData.instagram : null,
+        waActiveVal !== null ? waActiveVal : null,
         leadData.phone_type !== undefined ? leadData.phone_type : null,
         leadData.niche !== undefined ? leadData.niche : null,
         leadData.revenue_range !== undefined ? leadData.revenue_range : null,
@@ -193,7 +221,8 @@ class AppDatabase {
         leadData.name || null,
         leadData.company_name || null,
         leadData.phone || null,
-        leadData.is_whatsapp_active ? 1 : 0,
+        leadData.instagram || null,
+        waActiveVal,
         leadData.phone_type || null,
         leadData.niche || null,
         leadData.revenue_range || null,

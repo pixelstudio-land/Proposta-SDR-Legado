@@ -99,10 +99,11 @@ class OutboundMessenger {
    * Dispara mensagens frias para os leads aprovados
    */
   async sendColdDms(maxBatch = 5) {
-    // 1. Busca leads prontos para envio (status 'in_qualification' da fonte outbound_instagram)
+    // 1. Busca leads prontos para envio (fonte outbound_instagram ou leads do Maps com @instagram preenchido)
     const approvedLeads = db.db.prepare(`
       SELECT * FROM leads 
-      WHERE source = 'outbound_instagram' AND status = 'in_qualification'
+      WHERE (source = 'outbound_instagram' OR (instagram IS NOT NULL AND instagram != '')) 
+        AND status IN ('in_qualification', 'new')
       ORDER BY id ASC
       LIMIT ?
     `).all(maxBatch);
@@ -124,7 +125,7 @@ class OutboundMessenger {
       await this.ensureAuthenticated(page, context, currentSender);
 
       for (const lead of approvedLeads) {
-        const username = lead.identifier.replace('@', '').trim();
+        const username = (lead.instagram || lead.identifier || '').replace('@', '').trim();
 
         // 2. Proteção Anti-Duplicação: checa se recebeu mensagem nos últimos 90 dias
         const recentMessage = db.db.prepare(`
