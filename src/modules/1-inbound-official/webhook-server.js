@@ -442,6 +442,36 @@ app.get('/api/dashboard/leads', (req, res) => {
 });
 
 /**
+ * DELETE /api/dashboard/leads/:id
+ * Exclui um lead específico e seus históricos
+ */
+app.delete('/api/dashboard/leads/:id', (req, res) => {
+  try {
+    const success = db.deleteLead(req.params.id);
+    if (!success) {
+      return res.status(404).json({ success: false, error: 'Lead não encontrado.' });
+    }
+    return res.status(200).json({ success: true, message: 'Lead excluído com sucesso.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/dashboard/leads
+ * Limpa todos os leads e seus históricos de conversa
+ */
+app.delete('/api/dashboard/leads', (req, res) => {
+  try {
+    db.clearAllLeads();
+    appendLog('system', 'Todos os leads e históricos foram removidos da base.', 'info');
+    return res.status(200).json({ success: true, message: 'Todos os leads foram excluídos com sucesso.' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /api/dashboard/leads/:id/history
  * Retorna a memória contínua de turnos (conversation_history) do lead para auditoria
  */
@@ -497,27 +527,144 @@ app.get('/api/dashboard/accounts', (req, res) => {
 });
 
 /**
+ * Helper para validar e persistir cookies/storageState de sessão para uma conta
+ */
+function saveSessionCookiesForAccount(account, { sessionid, storageState, cookies }) {
+  const cleanUser = String(account.username).replace(/[^a-zA-Z0-9._-]/g, '_');
+  const sessionPath = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
+
+  let finalStorageState = null;
+
+  // Caso 1: storageState JSON completo
+  if (storageState) {
+    if (typeof storageState === 'string') {
+      try {
+        const parsed = JSON.parse(storageState);
+        if (parsed && (parsed.cookies || Array.isArray(parsed))) {
+          finalStorageState = Array.isArray(parsed) ? { cookies: parsed, origins: [{ origin: 'https://www.instagram.com', localStorage: [] }] } : parsed;
+        }
+      } catch (_) {}
+    } else if (typeof storageState === 'object' && storageState.cookies) {
+      finalStorageState = storageState;
+    }
+  }
+
+  // Caso 2: Array de cookies
+  if (!finalStorageState && (Array.isArray(cookies) || Array.isArray(storageState))) {
+    const cookieList = Array.isArray(cookies) ? cookies : storageState;
+    finalStorageState = {
+      cookies: cookieList.map(c => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain || '.instagram.com',
+        path: c.path || '/',
+        expires: c.expirationDate || c.expires || Math.floor(Date.now() / 1000) + 365 * 86400,
+        httpOnly: Boolean(c.httpOnly),
+        secure: Boolean(c.secure),
+        sameSite: c.sameSite || 'None'
+      })),
+      origins: [{ origin: 'https://www.instagram.com', localStorage: [] }]
+    };
+  }
+
+  // Caso 3: String de cookie ou sessionid isolado
+  const rawInput = sessionid || (typeof storageState === 'string' ? storageState : '');
+  if (!finalStorageState && rawInput) {
+    let cleanSessionId = rawInput.trim();
+    let cleanUserId = null;
+
+    if (cleanSessionId.includes('sessionid=')) {
+      const matchSession = cleanSessionId.match(/sessionid=([^;\s]+)/);
+      if (matchSession) cleanSessionId = matchSession[1];
+    }
+    if (rawInput.includes('ds_user_id=')) {
+      const matchUser = rawInput.match(/ds_user_id=([^;\s]+)/);
+      if (matchUser) cleanUserId = matchUser[1];
+    }
+
+    cleanSessionId = cleanSessionId.replace(/^['"]|['"]$/g, '');
+
+    if (cleanSessionId && cleanSessionId.length >= 10) {
+      finalStorageState = {
+        cookies: [
+          {
+            name: 'sessionid',
+            value: cleanSessionId,
+            domain: '.instagram.com',
+            path: '/',
+            expires: Math.floor(Date.now() / 1000) + 365 * 86400,
+            httpOnly: true,
+            secure: true,
+            sameSite: 'None'
+          },
+          ...(cleanUserId ? [{
+            name: 'ds_user_id',
+            value: cleanUserId,
+            domain: '.instagram.com',
+            path: '/',
+            expires: Math.floor(Date.now() / 1000) + 365 * 86400,
+            httpOnly: false,
+            secure: true,
+            sameSite: 'None'
+          }] : [])
+        ],
+        origins: [{ origin: 'https://www.instagram.com', localStorage: [] }]
+      };
+    }
+  }
+
+  if (!finalStorageState) {
+    return { success: false, error: 'Nenhum cookie sessionid ou JSON de sessão válido foi fornecido.' };
+  }
+
+  if (!fs.existsSync(settings.paths.sessionsDir)) {
+    fs.mkdirSync(settings.paths.sessionsDir, { recursive: true });
+  }
+
+  fs.writeFileSync(sessionPath, JSON.stringify(finalStorageState, null, 2), 'utf8');
+  db.updateInstagramAccountStatus(account.id, 'active');
+  appendLog('outbound', `Sessão da conta @${account.username} importada com sucesso via sessionid!`, 'success');
+
+  return { success: true, sessionPath };
+}
+
+/**
  * POST /api/dashboard/accounts
- * Cadastra uma nova conta do Instagram no SQLite
+ * Cadastra uma nova conta do Instagram no SQLite (suporta cookie sessionid imediato)
  */
 app.post('/api/dashboard/accounts', (req, res) => {
   try {
-    const { username, password, role, proxy, daily_limit } = req.body;
-    if (!username || !password) {
-      return res.status(400).json({ success: false, error: 'Usuário e senha são obrigatórios.' });
+    const { username, password, role, proxy, daily_limit, sessionid, storageState, cookies } = req.body;
+    if (!username) {
+      return res.status(400).json({ success: false, error: 'O nome de usuário é obrigatório.' });
+    }
+
+    const hasSessionInput = Boolean(sessionid || storageState || cookies);
+    if (!password && !hasSessionInput) {
+      return res.status(400).json({ success: false, error: 'Informe a senha ou o cookie de sessão para cadastrar a conta.' });
     }
 
     const account = db.createInstagramAccount({
       username,
-      password,
+      password: password || '',
       role: role === 'sender' ? 'sender' : 'scraper',
       proxy,
       daily_limit: parseInt(daily_limit || '25', 10)
     });
 
-    appendLog('system', `Conta @${account.username} cadastrada como ${account.role}.`, 'info');
+    let sessionSaved = false;
+    if (hasSessionInput) {
+      const sessionRes = saveSessionCookiesForAccount(account, { sessionid, storageState, cookies });
+      sessionSaved = sessionRes.success;
+      if (sessionSaved) {
+        account.status = 'active';
+        account.has_session = true;
+      }
+    }
 
-    return res.status(201).json({ success: true, account });
+    appendLog('system', `Conta @${account.username} cadastrada como ${account.role}${sessionSaved ? ' com sessão ativa' : ''}.`, 'info');
+
+    return res.status(201).json({ success: true, account, sessionSaved });
   } catch (err) {
     return res.status(400).json({ success: false, error: err.message });
   }
@@ -564,114 +711,15 @@ app.post('/api/dashboard/accounts/:id/session', async (req, res) => {
   const { sessionid, storageState, cookies } = req.body || {};
 
   try {
-    const cleanUser = String(account.username).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const sessionPath = path.join(settings.paths.sessionsDir, `${cleanUser}.json`);
-
-    let finalStorageState = null;
-
-    // Caso 1: storageState JSON completo
-    if (storageState) {
-      if (typeof storageState === 'string') {
-        try {
-          const parsed = JSON.parse(storageState);
-          if (parsed && (parsed.cookies || Array.isArray(parsed))) {
-            finalStorageState = Array.isArray(parsed) ? { cookies: parsed, origins: [{ origin: 'https://www.instagram.com', localStorage: [] }] } : parsed;
-          }
-        } catch (_) {}
-      } else if (typeof storageState === 'object' && storageState.cookies) {
-        finalStorageState = storageState;
-      }
+    const sessionRes = saveSessionCookiesForAccount(account, { sessionid, storageState, cookies });
+    if (!sessionRes.success) {
+      return res.status(400).json({ success: false, error: sessionRes.error });
     }
-
-    // Caso 2: Array de cookies
-    if (!finalStorageState && (Array.isArray(cookies) || Array.isArray(storageState))) {
-      const cookieList = Array.isArray(cookies) ? cookies : storageState;
-      finalStorageState = {
-        cookies: cookieList.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain || '.instagram.com',
-          path: c.path || '/',
-          expires: c.expirationDate || c.expires || Math.floor(Date.now() / 1000) + 365 * 86400,
-          httpOnly: Boolean(c.httpOnly),
-          secure: Boolean(c.secure),
-          sameSite: c.sameSite || 'None'
-        })),
-        origins: [{ origin: 'https://www.instagram.com', localStorage: [] }]
-      };
-    }
-
-    // Caso 3: String de cookie ou sessionid isolado
-    const rawInput = sessionid || (typeof storageState === 'string' ? storageState : '');
-    if (!finalStorageState && rawInput) {
-      let cleanSessionId = rawInput.trim();
-      let cleanUserId = null;
-
-      if (cleanSessionId.includes('sessionid=')) {
-        const matchSession = cleanSessionId.match(/sessionid=([^;\s]+)/);
-        if (matchSession) cleanSessionId = matchSession[1];
-      }
-      if (rawInput.includes('ds_user_id=')) {
-        const matchUser = rawInput.match(/ds_user_id=([^;\s]+)/);
-        if (matchUser) cleanUserId = matchUser[1];
-      }
-
-      cleanSessionId = cleanSessionId.replace(/^['"]|['"]$/g, '');
-
-      if (!cleanSessionId || cleanSessionId.length < 10) {
-        return res.status(400).json({
-          success: false,
-          error: 'Valor de sessionid inválido ou muito curto.'
-        });
-      }
-
-      finalStorageState = {
-        cookies: [
-          {
-            name: 'sessionid',
-            value: cleanSessionId,
-            domain: '.instagram.com',
-            path: '/',
-            expires: Math.floor(Date.now() / 1000) + 365 * 86400,
-            httpOnly: true,
-            secure: true,
-            sameSite: 'None'
-          },
-          ...(cleanUserId ? [{
-            name: 'ds_user_id',
-            value: cleanUserId,
-            domain: '.instagram.com',
-            path: '/',
-            expires: Math.floor(Date.now() / 1000) + 365 * 86400,
-            httpOnly: false,
-            secure: true,
-            sameSite: 'None'
-          }] : [])
-        ],
-        origins: [{ origin: 'https://www.instagram.com', localStorage: [] }]
-      };
-    }
-
-    if (!finalStorageState) {
-      return res.status(400).json({
-        success: false,
-        error: 'Nenhum cookie sessionid ou JSON de sessão válido foi fornecido.'
-      });
-    }
-
-    if (!fs.existsSync(settings.paths.sessionsDir)) {
-      fs.mkdirSync(settings.paths.sessionsDir, { recursive: true });
-    }
-
-    fs.writeFileSync(sessionPath, JSON.stringify(finalStorageState, null, 2), 'utf8');
-
-    db.updateInstagramAccountStatus(account.id, 'active');
-    appendLog('outbound', `Sessão da conta @${account.username} importada com sucesso via sessionid!`, 'success');
 
     return res.status(200).json({
       success: true,
       message: `Cookies salvos para @${account.username}! Conta ativada com sucesso.`,
-      sessionPath
+      sessionPath: sessionRes.sessionPath
     });
   } catch (err) {
     appendLog('outbound', `Erro ao importar sessão para @${account.username}: ${err.message}`, 'error');

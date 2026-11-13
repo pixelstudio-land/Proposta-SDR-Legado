@@ -69,7 +69,7 @@ export async function initNativeWhatsApp() {
         connectionState = 'QR_READY';
         currentQrRaw = qr;
         try {
-          currentQrCodeDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
+          currentQrCodeDataUrl = await QRCode.toDataURL(qr, { margin: 3, scale: 8 });
         } catch (err) {
           console.warn('⚠️ [WhatsApp Baileys] Erro ao converter QR Code para DataURL:', err.message);
           currentQrCodeDataUrl = null;

@@ -9,18 +9,28 @@ document.addEventListener('DOMContentLoaded', () => {
   let allLeads = [];
   let pollInterval = null;
 
+  // Helper de escuta segura de eventos do DOM (previne exceção se elemento for nulo)
+  function safeListen(elem, event, handler) {
+    if (elem) {
+      elem.addEventListener(event, handler);
+    }
+  }
+
   // Interceptador Global de Fetch para Autenticação Administrativa
   const originalFetch = window.fetch;
   window.fetch = async function(...args) {
     let [resource, config] = args;
-    config = config || {};
-    config.headers = config.headers || {};
+    config = config ? { ...config } : {};
 
-    const token = localStorage.getItem('legado_admin_token');
-    if (token) {
-      if (config.headers instanceof Headers) {
-        config.headers.set('x-admin-token', token);
-      } else {
+    let headers = config.headers;
+    if (headers instanceof Headers) {
+      const token = localStorage.getItem('legado_admin_token');
+      if (token) headers.set('x-admin-token', token);
+      config.headers = headers;
+    } else {
+      config.headers = { ...(headers || {}) };
+      const token = localStorage.getItem('legado_admin_token');
+      if (token) {
         config.headers['x-admin-token'] = token;
       }
     }
@@ -110,6 +120,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const filterSource = document.getElementById('filterSource');
   const filterStatus = document.getElementById('filterStatus');
   const btnRefreshAll = document.getElementById('btnRefreshAll');
+  const btnClearAllLeads = document.getElementById('btnClearAllLeads');
 
   // Elementos do DOM - Modal do Lead
   const leadModal = document.getElementById('leadModal');
@@ -140,6 +151,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const accRole = document.getElementById('accRole');
   const accLimit = document.getElementById('accLimit');
   const accProxy = document.getElementById('accProxy');
+  const accSessionCookie = document.getElementById('accSessionCookie');
   const btnAddAccount = document.getElementById('btnAddAccount');
   const addAccountFeedback = document.getElementById('addAccountFeedback');
   const accountsTableBody = document.getElementById('accountsTableBody');
@@ -157,6 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const cfgWaPitchTemplate = document.getElementById('cfgWaPitchTemplate');
   const btnSaveConfig = document.getElementById('btnSaveConfig');
   const configFeedback = document.getElementById('configFeedback');
+  const btnOpenWaModalFromSettings = document.getElementById('btnOpenWaModalFromSettings');
   const btnValidateLeadsWa = document.getElementById('btnValidateLeadsWa');
   const waValidationFeedback = document.getElementById('waValidationFeedback');
 
@@ -498,11 +511,16 @@ document.addEventListener('DOMContentLoaded', () => {
           <td>${ratingCell}</td>
           <td>${sourceBadge}</td>
           <td>${statusBadge}</td>
-          <td style="text-align: right;">
-            <button class="btn btn-secondary btn-sm btn-open-modal" data-lead-id="${lead.id}" type="button">
-              ${icons.eye}
-              <span>Dossiê</span>
-            </button>
+          <td style="text-align: right; white-space: nowrap;">
+            <div style="display: flex; align-items: center; justify-content: flex-end; gap: 6px;">
+              <button class="btn btn-secondary btn-sm btn-open-modal" data-lead-id="${lead.id}" type="button" title="Ver dossiê completo">
+                ${icons.eye}
+                <span>Dossiê</span>
+              </button>
+              <button class="btn-delete-lead" data-lead-id="${lead.id}" data-name="${escapeHtml(lead.company_name || lead.name || 'Lead')}" type="button" title="Excluir este lead">
+                ${icons.trash}
+              </button>
+            </div>
           </td>
         </tr>
       `;
@@ -513,6 +531,29 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.addEventListener('click', () => {
         const leadId = btn.getAttribute('data-lead-id');
         openLeadModal(leadId);
+      });
+    });
+
+    // Listener para exclusão de lead individual
+    document.querySelectorAll('.btn-delete-lead').forEach(btn => {
+      btn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        const leadId = btn.getAttribute('data-lead-id');
+        const name = btn.getAttribute('data-name');
+        if (!confirm(`Deseja realmente excluir o lead "${name}"?`)) return;
+
+        try {
+          const res = await fetch(`/api/dashboard/leads/${leadId}`, { method: 'DELETE' });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            alert(`Erro ao excluir lead: ${data.error || 'Falha no servidor'}`);
+            return;
+          }
+          await loadLeads();
+          await loadStats();
+        } catch (err) {
+          alert(`Falha de conexão: ${err.message}`);
+        }
       });
     });
   }
@@ -561,18 +602,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // ============================================================================
   // 4. SUBMISSÃO DE MINERAÇÃO NO GOOGLE MAPS
   // ============================================================================
-  formMiner.addEventListener('submit', async (e) => {
+  safeListen(formMiner, 'submit', async (e) => {
     e.preventDefault();
-    const query = minerQuery.value.trim();
-    const limit = minerLimit.value;
+    const query = minerQuery ? minerQuery.value.trim() : '';
+    const limit = minerLimit ? minerLimit.value : '5';
     if (!query) return;
 
-    btnRunMiner.disabled = true;
-    minerSpinner.classList.remove('hidden');
+    if (btnRunMiner) btnRunMiner.disabled = true;
+    if (minerSpinner) minerSpinner.classList.remove('hidden');
     if (minerBtnIcon) minerBtnIcon.classList.add('hidden');
-    minerBtnText.textContent = 'Iniciando extração...';
-    minerFeedback.textContent = 'Enviando comando para o robô...';
-    minerFeedback.className = 'feedback-text';
+    if (minerBtnText) minerBtnText.textContent = 'Iniciando extração...';
+    if (minerFeedback) {
+      minerFeedback.textContent = 'Enviando comando para o robô...';
+      minerFeedback.className = 'feedback-text';
+    }
 
     try {
       const res = await fetch('/api/dashboard/miner', {
@@ -583,45 +626,53 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        minerFeedback.textContent = `Erro: ${data.error || 'Falha ao iniciar mineração'}`;
-        minerFeedback.className = 'feedback-text error';
-        btnRunMiner.disabled = false;
-        minerSpinner.classList.add('hidden');
+        if (minerFeedback) {
+          minerFeedback.textContent = `Erro: ${data.error || 'Falha ao iniciar mineração'}`;
+          minerFeedback.className = 'feedback-text error';
+        }
+        if (btnRunMiner) btnRunMiner.disabled = false;
+        if (minerSpinner) minerSpinner.classList.add('hidden');
         if (minerBtnIcon) minerBtnIcon.classList.remove('hidden');
-        minerBtnText.textContent = 'Iniciar Mineração no Maps';
+        if (minerBtnText) minerBtnText.textContent = 'Iniciar Mineração no Maps';
         return;
       }
 
-      minerFeedback.textContent = 'Robô em execução em background...';
-      minerFeedback.className = 'feedback-text success';
+      if (minerFeedback) {
+        minerFeedback.textContent = 'Robô em execução em background...';
+        minerFeedback.className = 'feedback-text success';
+      }
       startProgressPolling();
 
     } catch (err) {
-      minerFeedback.textContent = `Falha de rede: ${err.message}`;
-      minerFeedback.className = 'feedback-text error';
-      btnRunMiner.disabled = false;
-      minerSpinner.classList.add('hidden');
+      if (minerFeedback) {
+        minerFeedback.textContent = `Falha de rede: ${err.message}`;
+        minerFeedback.className = 'feedback-text error';
+      }
+      if (btnRunMiner) btnRunMiner.disabled = false;
+      if (minerSpinner) minerSpinner.classList.add('hidden');
       if (minerBtnIcon) minerBtnIcon.classList.remove('hidden');
-      minerBtnText.textContent = 'Iniciar Mineração no Maps';
+      if (minerBtnText) minerBtnText.textContent = 'Iniciar Mineração no Maps';
     }
   });
 
   // ============================================================================
   // 5. SUBMISSÃO DE OUTBOUND COM TRAVA DE SEGURANÇA E BANNER DE ERRO
   // ============================================================================
-  formOutbound.addEventListener('submit', async (e) => {
+  safeListen(formOutbound, 'submit', async (e) => {
     e.preventDefault();
-    const target = outboundTarget.value.trim();
-    const limit = outboundLimit.value;
+    const target = outboundTarget ? outboundTarget.value.trim() : '';
+    const limit = outboundLimit ? outboundLimit.value : '25';
 
     // Reseta banner de erro e feedback anterior
-    outboundErrorBanner.classList.add('hidden');
-    outboundFeedback.textContent = 'Verificando contas de Instagram cadastradas...';
-    outboundFeedback.className = 'feedback-text';
+    if (outboundErrorBanner) outboundErrorBanner.classList.add('hidden');
+    if (outboundFeedback) {
+      outboundFeedback.textContent = 'Verificando contas de Instagram cadastradas...';
+      outboundFeedback.className = 'feedback-text';
+    }
 
     // Estado temporário de verificação (NUNCA diz que está disparando antes do backend aprovar)
-    btnRunOutbound.disabled = true;
-    outboundBtnText.textContent = 'Validando conexões...';
+    if (btnRunOutbound) btnRunOutbound.disabled = true;
+    if (outboundBtnText) outboundBtnText.textContent = 'Validando conexões...';
 
     try {
       const res = await fetch('/api/dashboard/outbound', {
@@ -636,16 +687,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const errorMsg = data.error || 'Nenhuma conta Scraper/Sender conectada. Cadastre e autentique suas contas primeiro.';
         
         // Exibe erro em vermelho vivo e abre banner de alerta
-        outboundFeedback.textContent = errorMsg;
-        outboundFeedback.className = 'feedback-text error';
-        outboundErrorMessage.textContent = errorMsg;
-        outboundErrorBanner.classList.remove('hidden');
+        if (outboundFeedback) {
+          outboundFeedback.textContent = errorMsg;
+          outboundFeedback.className = 'feedback-text error';
+        }
+        if (outboundErrorMessage) outboundErrorMessage.textContent = errorMsg;
+        if (outboundErrorBanner) outboundErrorBanner.classList.remove('hidden');
 
         // Reseta o botão para o estado pronto (NUNCA mente dizendo que disparou DMs)
-        btnRunOutbound.disabled = false;
-        outboundSpinner.classList.add('hidden');
+        if (btnRunOutbound) btnRunOutbound.disabled = false;
+        if (outboundSpinner) outboundSpinner.classList.add('hidden');
         if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
-        outboundBtnText.textContent = 'Disparar Outbound com IA';
+        if (outboundBtnText) outboundBtnText.textContent = 'Disparar Outbound com IA';
         
         // Registra log local no console
         appendConsoleLine(outboundConsoleLines, `[BLOQUEIO DE SEGURANÇA] ${errorMsg}`, 'error');
@@ -653,28 +706,32 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // Sucesso real: Inicia disparo
-      btnRunOutbound.disabled = true;
-      outboundSpinner.classList.remove('hidden');
+      if (btnRunOutbound) btnRunOutbound.disabled = true;
+      if (outboundSpinner) outboundSpinner.classList.remove('hidden');
       if (outboundBtnIcon) outboundBtnIcon.classList.add('hidden');
-      outboundBtnText.textContent = 'Disparando DMs...';
-      outboundFeedback.textContent = 'Auditoria e envio em andamento...';
-      outboundFeedback.className = 'feedback-text';
+      if (outboundBtnText) outboundBtnText.textContent = 'Disparando DMs...';
+      if (outboundFeedback) {
+        outboundFeedback.textContent = 'Auditoria e envio em andamento...';
+        outboundFeedback.className = 'feedback-text';
+      }
 
       appendConsoleLine(outboundConsoleLines, `[OUTBOUND INICIADO] Disparando para @${target} (limite ${limit})`, 'info');
       startProgressPolling();
 
     } catch (err) {
-      outboundFeedback.textContent = `Falha de rede: ${err.message}`;
-      outboundFeedback.className = 'feedback-text error';
-      btnRunOutbound.disabled = false;
-      outboundSpinner.classList.add('hidden');
+      if (outboundFeedback) {
+        outboundFeedback.textContent = `Falha de rede: ${err.message}`;
+        outboundFeedback.className = 'feedback-text error';
+      }
+      if (btnRunOutbound) btnRunOutbound.disabled = false;
+      if (outboundSpinner) outboundSpinner.classList.add('hidden');
       if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
-      outboundBtnText.textContent = 'Disparar Outbound com IA';
+      if (outboundBtnText) outboundBtnText.textContent = 'Disparar Outbound com IA';
     }
   });
 
   // Ação de clique no banner de erro para conectar contas
-  btnErrorOpenSettings.addEventListener('click', () => {
+  safeListen(btnErrorOpenSettings, 'click', () => {
     openSettingsModal('accounts');
   });
 
@@ -785,49 +842,82 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Formulário de Cadastro de Conta
-  formAddAccount.addEventListener('submit', async (e) => {
+  safeListen(formAddAccount, 'submit', async (e) => {
     e.preventDefault();
-    const username = accUsername.value.trim().replace(/^@/, '');
-    const password = accPassword.value.trim();
-    const role = accRole.value;
-    const daily_limit = parseInt(accLimit.value, 10) || 25;
-    const proxy = accProxy.value.trim();
+    const username = accUsername ? accUsername.value.trim().replace(/^@/, '') : '';
+    const password = accPassword ? accPassword.value.trim() : '';
+    const sessionCookie = accSessionCookie ? accSessionCookie.value.trim() : '';
+    const role = accRole ? accRole.value : 'scraper';
+    const daily_limit = parseInt(accLimit ? accLimit.value : '25', 10) || 25;
+    const proxy = accProxy ? accProxy.value.trim() : '';
 
-    if (!username || !password) return;
+    if (!username) {
+      if (addAccountFeedback) {
+        addAccountFeedback.textContent = 'O nome de usuário é obrigatório.';
+        addAccountFeedback.className = 'feedback-text error';
+      }
+      return;
+    }
 
-    btnAddAccount.disabled = true;
-    addAccountFeedback.textContent = 'Cadastrando conta no SQLite...';
-    addAccountFeedback.className = 'feedback-text';
+    if (!password && !sessionCookie) {
+      if (addAccountFeedback) {
+        addAccountFeedback.textContent = 'Informe a senha ou o cookie de sessão para cadastrar.';
+        addAccountFeedback.className = 'feedback-text error';
+      }
+      return;
+    }
+
+    if (btnAddAccount) btnAddAccount.disabled = true;
+    if (addAccountFeedback) {
+      addAccountFeedback.textContent = 'Cadastrando conta no SQLite...';
+      addAccountFeedback.className = 'feedback-text';
+    }
 
     try {
       const res = await fetch('/api/dashboard/accounts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password, role, daily_limit, proxy })
+        body: JSON.stringify({
+          username,
+          password: password || undefined,
+          sessionid: sessionCookie || undefined,
+          role,
+          daily_limit,
+          proxy
+        })
       });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        addAccountFeedback.textContent = `Erro: ${data.error || 'Falha ao cadastrar conta'}`;
-        addAccountFeedback.className = 'feedback-text error';
-        btnAddAccount.disabled = false;
+        if (addAccountFeedback) {
+          addAccountFeedback.textContent = `Erro: ${data.error || 'Falha ao cadastrar conta'}`;
+          addAccountFeedback.className = 'feedback-text error';
+        }
+        if (btnAddAccount) btnAddAccount.disabled = false;
         return;
       }
 
-      addAccountFeedback.textContent = 'Conta cadastrada com sucesso! Clique em "Autenticar no Navegador" para salvar os cookies.';
-      addAccountFeedback.className = 'feedback-text success';
+      if (addAccountFeedback) {
+        const msg = data.sessionSaved
+          ? 'Conta cadastrada e ativada imediatamente com cookies!'
+          : 'Conta cadastrada com sucesso! Clique em "Navegador" ou "Importar Cookie" para ativar.';
+        addAccountFeedback.textContent = msg;
+        addAccountFeedback.className = 'feedback-text success';
+      }
       formAddAccount.reset();
-      accRole.value = role;
-      accLimit.value = 25;
-      btnAddAccount.disabled = false;
+      if (accRole) accRole.value = role;
+      if (accLimit) accLimit.value = 25;
+      if (btnAddAccount) btnAddAccount.disabled = false;
 
       await loadAccounts();
       await loadStats();
 
     } catch (err) {
-      addAccountFeedback.textContent = `Falha de conexão: ${err.message}`;
-      addAccountFeedback.className = 'feedback-text error';
-      btnAddAccount.disabled = false;
+      if (addAccountFeedback) {
+        addAccountFeedback.textContent = `Falha de conexão: ${err.message}`;
+        addAccountFeedback.className = 'feedback-text error';
+      }
+      if (btnAddAccount) btnAddAccount.disabled = false;
     }
   });
 
@@ -970,7 +1060,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  btnRefreshAccounts.addEventListener('click', loadAccounts);
+  safeListen(btnRefreshAccounts, 'click', loadAccounts);
 
   // ============================================================================
   // 7. CONFIGURAÇÕES DE APIS, CRON & TEMPLATES (SQLITE & .ENV)
@@ -982,9 +1072,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!data.success || !data.config) return;
 
       const c = data.config;
-      if (c.OPENAI_API_KEY) cfgOpenAiKey.value = c.OPENAI_API_KEY;
-      if (c.SDR_NOTIFICATION_PHONE) cfgSdrPhone.value = c.SDR_NOTIFICATION_PHONE;
-      if (c.CRM_WEBHOOK_URL) cfgCrmWebhook.value = c.CRM_WEBHOOK_URL;
+      if (c.OPENAI_API_KEY && cfgOpenAiKey) cfgOpenAiKey.value = c.OPENAI_API_KEY;
+      if (c.SDR_NOTIFICATION_PHONE && cfgSdrPhone) cfgSdrPhone.value = c.SDR_NOTIFICATION_PHONE;
+      if (c.CRM_WEBHOOK_URL && cfgCrmWebhook) cfgCrmWebhook.value = c.CRM_WEBHOOK_URL;
       if (cfgCrmApiKey && c.CRM_API_KEY) cfgCrmApiKey.value = c.CRM_API_KEY;
       if (cfgWaMinDelay && c.WHATSAPP_MIN_DELAY) cfgWaMinDelay.value = c.WHATSAPP_MIN_DELAY;
       if (cfgWaMaxDelay && c.WHATSAPP_MAX_DELAY) cfgWaMaxDelay.value = c.WHATSAPP_MAX_DELAY;
@@ -994,16 +1084,18 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  formApiSettings.addEventListener('submit', async (e) => {
+  safeListen(formApiSettings, 'submit', async (e) => {
     e.preventDefault();
-    btnSaveConfig.disabled = true;
-    configFeedback.textContent = 'Gravando parâmetros no SQLite e .env...';
-    configFeedback.className = 'feedback-text';
+    if (btnSaveConfig) btnSaveConfig.disabled = true;
+    if (configFeedback) {
+      configFeedback.textContent = 'Gravando parâmetros no SQLite e .env...';
+      configFeedback.className = 'feedback-text';
+    }
 
     const payload = {
-      OPENAI_API_KEY: cfgOpenAiKey.value.trim(),
-      SDR_NOTIFICATION_PHONE: cfgSdrPhone.value.trim(),
-      CRM_WEBHOOK_URL: cfgCrmWebhook.value.trim(),
+      OPENAI_API_KEY: cfgOpenAiKey ? cfgOpenAiKey.value.trim() : '',
+      SDR_NOTIFICATION_PHONE: cfgSdrPhone ? cfgSdrPhone.value.trim() : '',
+      CRM_WEBHOOK_URL: cfgCrmWebhook ? cfgCrmWebhook.value.trim() : '',
       CRM_API_KEY: cfgCrmApiKey ? cfgCrmApiKey.value.trim() : '',
       WHATSAPP_MIN_DELAY: cfgWaMinDelay ? parseInt(cfgWaMinDelay.value, 10) : 60,
       WHATSAPP_MAX_DELAY: cfgWaMaxDelay ? parseInt(cfgWaMaxDelay.value, 10) : 120,
@@ -1019,53 +1111,67 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        configFeedback.textContent = `Erro ao salvar: ${data.error || 'Falha no servidor'}`;
-        configFeedback.className = 'feedback-text error';
-        btnSaveConfig.disabled = false;
+        if (configFeedback) {
+          configFeedback.textContent = `Erro ao salvar: ${data.error || 'Falha no servidor'}`;
+          configFeedback.className = 'feedback-text error';
+        }
+        if (btnSaveConfig) btnSaveConfig.disabled = false;
         return;
       }
 
-      configFeedback.textContent = 'Configurações salvas no SQLite e .env com sucesso!';
-      configFeedback.className = 'feedback-text success';
-      btnSaveConfig.disabled = false;
+      if (configFeedback) {
+        configFeedback.textContent = 'Configurações salvas no SQLite e .env com sucesso!';
+        configFeedback.className = 'feedback-text success';
+      }
+      if (btnSaveConfig) btnSaveConfig.disabled = false;
 
       await loadWaDispatcherStatus();
 
     } catch (err) {
-      configFeedback.textContent = `Erro de conexão: ${err.message}`;
-      configFeedback.className = 'feedback-text error';
-      btnSaveConfig.disabled = false;
+      if (configFeedback) {
+        configFeedback.textContent = `Erro de conexão: ${err.message}`;
+        configFeedback.className = 'feedback-text error';
+      }
+      if (btnSaveConfig) btnSaveConfig.disabled = false;
     }
   });
 
   // Validação Ativa de WhatsApp dos Leads (wa-checker.js Baileys Nativo)
-  btnValidateLeadsWa.addEventListener('click', async () => {
-    btnValidateLeadsWa.disabled = true;
-    waValidationFeedback.textContent = 'Consultando o WhatsApp Baileys Nativo para validar leads (fixos e celulares)...';
-    waValidationFeedback.className = 'feedback-text';
+  safeListen(btnValidateLeadsWa, 'click', async () => {
+    if (btnValidateLeadsWa) btnValidateLeadsWa.disabled = true;
+    if (waValidationFeedback) {
+      waValidationFeedback.textContent = 'Consultando o WhatsApp Baileys Nativo para validar leads (fixos e celulares)...';
+      waValidationFeedback.className = 'feedback-text';
+    }
 
     try {
       const res = await fetch('/api/dashboard/validate-leads-wa', { method: 'POST' });
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        waValidationFeedback.textContent = `Erro: ${data.error || 'Falha ao validar WhatsApp'}`;
-        waValidationFeedback.className = 'feedback-text error';
-        btnValidateLeadsWa.disabled = false;
+        if (waValidationFeedback) {
+          waValidationFeedback.textContent = `Erro: ${data.error || 'Falha ao validar WhatsApp'}`;
+          waValidationFeedback.className = 'feedback-text error';
+        }
+        if (btnValidateLeadsWa) btnValidateLeadsWa.disabled = false;
         return;
       }
 
-      waValidationFeedback.textContent = data.message || 'Leads validados com sucesso!';
-      waValidationFeedback.className = 'feedback-text success';
-      btnValidateLeadsWa.disabled = false;
+      if (waValidationFeedback) {
+        waValidationFeedback.textContent = data.message || 'Leads validados com sucesso!';
+        waValidationFeedback.className = 'feedback-text success';
+      }
+      if (btnValidateLeadsWa) btnValidateLeadsWa.disabled = false;
 
       await loadLeads();
       await loadStats();
 
     } catch (err) {
-      waValidationFeedback.textContent = `Falha de rede: ${err.message}`;
-      waValidationFeedback.className = 'feedback-text error';
-      btnValidateLeadsWa.disabled = false;
+      if (waValidationFeedback) {
+        waValidationFeedback.textContent = `Falha de rede: ${err.message}`;
+        waValidationFeedback.className = 'feedback-text error';
+      }
+      if (btnValidateLeadsWa) btnValidateLeadsWa.disabled = false;
     }
   });
 
@@ -1126,38 +1232,42 @@ document.addEventListener('DOMContentLoaded', () => {
   // 9. NAVEGAÇÃO DE ABAS E CONTROLE DOS MODAIS
   // ============================================================================
   function openSettingsModal(defaultTab = 'accounts') {
-    settingsModal.classList.remove('hidden');
+    if (settingsModal) settingsModal.classList.remove('hidden');
     switchSettingsTab(defaultTab);
     loadAccounts();
     loadConfig();
   }
 
   function closeSettingsModal() {
-    settingsModal.classList.add('hidden');
+    if (settingsModal) settingsModal.classList.add('hidden');
   }
 
   function switchSettingsTab(tab) {
     if (tab === 'accounts') {
-      btnTabAccounts.classList.add('active');
-      btnTabApis.classList.remove('active');
-      tabAccountsContent.classList.remove('hidden');
-      tabApisContent.classList.add('hidden');
+      if (btnTabAccounts) btnTabAccounts.classList.add('active');
+      if (btnTabApis) btnTabApis.classList.remove('active');
+      if (tabAccountsContent) tabAccountsContent.classList.remove('hidden');
+      if (tabApisContent) tabApisContent.classList.add('hidden');
     } else {
-      btnTabApis.classList.add('active');
-      btnTabAccounts.classList.remove('active');
-      tabApisContent.classList.remove('hidden');
-      tabAccountsContent.classList.add('hidden');
+      if (btnTabApis) btnTabApis.classList.add('active');
+      if (btnTabAccounts) btnTabAccounts.classList.remove('active');
+      if (tabApisContent) tabApisContent.classList.remove('hidden');
+      if (tabAccountsContent) tabAccountsContent.classList.add('hidden');
     }
   }
 
-  btnOpenSettings.addEventListener('click', () => openSettingsModal('accounts'));
-  kpiAccountsCard.addEventListener('click', () => openSettingsModal('accounts'));
-  settingsModalClose.addEventListener('click', closeSettingsModal);
-  settingsModalBtnClose.addEventListener('click', closeSettingsModal);
-  btnTabAccounts.addEventListener('click', () => switchSettingsTab('accounts'));
-  btnTabApis.addEventListener('click', () => switchSettingsTab('apis'));
+  safeListen(btnOpenSettings, 'click', () => openSettingsModal('accounts'));
+  safeListen(kpiAccountsCard, 'click', () => openSettingsModal('accounts'));
+  safeListen(settingsModalClose, 'click', closeSettingsModal);
+  safeListen(settingsModalBtnClose, 'click', closeSettingsModal);
+  safeListen(btnTabAccounts, 'click', () => switchSettingsTab('accounts'));
+  safeListen(btnTabApis, 'click', () => switchSettingsTab('apis'));
+  safeListen(btnOpenWaModalFromSettings, 'click', () => {
+    closeSettingsModal();
+    openWhatsAppModal();
+  });
 
-  settingsModal.addEventListener('click', (e) => {
+  safeListen(settingsModal, 'click', (e) => {
     if (e.target === settingsModal) closeSettingsModal();
   });
 
@@ -1228,9 +1338,9 @@ document.addEventListener('DOMContentLoaded', () => {
     leadModal.classList.add('hidden');
   }
 
-  modalClose.addEventListener('click', closeLeadModal);
-  modalBtnClose.addEventListener('click', closeLeadModal);
-  leadModal.addEventListener('click', (e) => {
+  safeListen(modalClose, 'click', closeLeadModal);
+  safeListen(modalBtnClose, 'click', closeLeadModal);
+  safeListen(leadModal, 'click', (e) => {
     if (e.target === leadModal) closeLeadModal();
   });
 
@@ -1424,42 +1534,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  if (btnWaIndicator) btnWaIndicator.addEventListener('click', openWhatsAppModal);
-  if (waModalClose) waModalClose.addEventListener('click', closeWhatsAppModal);
-  if (waModal) {
-    waModal.addEventListener('click', (e) => {
-      if (e.target === waModal) closeWhatsAppModal();
-    });
-  }
+  safeListen(btnWaIndicator, 'click', openWhatsAppModal);
+  safeListen(btnWaIndicator, 'keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      openWhatsAppModal();
+    }
+  });
+  safeListen(waModalClose, 'click', closeWhatsAppModal);
+  safeListen(waModal, 'click', (e) => {
+    if (e.target === waModal) closeWhatsAppModal();
+  });
 
-  if (btnWaRefreshQr) {
-    btnWaRefreshQr.addEventListener('click', async () => {
-      if (waModalStatusTitle) waModalStatusTitle.textContent = 'Reiniciando motor Baileys...';
-      if (waQrImage) waQrImage.style.display = 'none';
-      if (waQrSpinner) waQrSpinner.style.display = 'flex';
-      try {
-        await fetch('/api/whatsapp/reconnect', { method: 'POST' });
-        setTimeout(fetchWhatsAppQr, 1000);
-      } catch (err) {
-        console.error('Erro ao reconectar WhatsApp:', err);
-      }
-    });
-  }
+  safeListen(btnWaRefreshQr, 'click', async () => {
+    if (waModalStatusTitle) waModalStatusTitle.textContent = 'Reiniciando motor Baileys...';
+    if (waQrImage) waQrImage.style.display = 'none';
+    if (waQrSpinner) waQrSpinner.style.display = 'flex';
+    try {
+      await fetch('/api/whatsapp/reconnect', { method: 'POST' });
+      setTimeout(fetchWhatsAppQr, 1000);
+    } catch (err) {
+      console.error('Erro ao reconectar WhatsApp:', err);
+    }
+  });
 
-  if (btnWaDisconnectSession) {
-    btnWaDisconnectSession.addEventListener('click', async () => {
-      if (!confirm('Deseja realmente desconectar o WhatsApp e limpar as credenciais salvas?')) {
-        return;
-      }
-      try {
-        await fetch('/api/whatsapp/disconnect', { method: 'POST' });
-        await fetchWhatsAppQr();
-        await fetchWhatsAppStatus();
-      } catch (err) {
-        console.error('Erro ao desconectar WhatsApp:', err);
-      }
-    });
-  }
+  safeListen(btnWaDisconnectSession, 'click', async () => {
+    if (!confirm('Deseja realmente desconectar o WhatsApp e limpar as credenciais salvas?')) {
+      return;
+    }
+    try {
+      await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+      await fetchWhatsAppQr();
+      await fetchWhatsAppStatus();
+    } catch (err) {
+      console.error('Erro ao desconectar WhatsApp:', err);
+    }
+  });
 
   // ============================================================================
   // FILA DE DISPARO AUTOMÁTICO WHATSAPP (BAILEYS NATIVO)
@@ -1507,22 +1617,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  if (btnToggleWaDispatcher) {
-    btnToggleWaDispatcher.addEventListener('click', async () => {
-      btnToggleWaDispatcher.disabled = true;
-      try {
-        const res = await fetch('/api/dashboard/whatsapp-dispatcher/toggle', { method: 'POST' });
-        const data = await res.json();
-        if (data.success && data.status) {
-          await loadWaDispatcherStatus();
-        }
-      } catch (err) {
-        console.error('Erro ao alternar fila WhatsApp:', err);
-      } finally {
-        btnToggleWaDispatcher.disabled = false;
+  safeListen(btnToggleWaDispatcher, 'click', async () => {
+    if (btnToggleWaDispatcher) btnToggleWaDispatcher.disabled = true;
+    try {
+      const res = await fetch('/api/dashboard/whatsapp-dispatcher/toggle', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.status) {
+        await loadWaDispatcherStatus();
       }
-    });
-  }
+    } catch (err) {
+      console.error('Erro ao alternar fila WhatsApp:', err);
+    } finally {
+      if (btnToggleWaDispatcher) btnToggleWaDispatcher.disabled = false;
+    }
+  });
 
   // ============================================================================
   // 10. POLLING & ATUALIZAÇÕES PERIÓDICAS
@@ -1538,22 +1646,40 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 2500);
   }
 
-  filterSearch.addEventListener('input', renderLeadsTable);
-  filterSource.addEventListener('change', renderLeadsTable);
-  filterStatus.addEventListener('change', renderLeadsTable);
+  safeListen(filterSearch, 'input', renderLeadsTable);
+  safeListen(filterSource, 'change', renderLeadsTable);
+  safeListen(filterStatus, 'change', renderLeadsTable);
 
-  btnRefreshAll.addEventListener('click', async () => {
-    btnRefreshAll.style.opacity = '0.5';
+  safeListen(btnClearAllLeads, 'click', async () => {
+    if (!confirm('Deseja realmente LIMPAR TODOS os leads cadastrados e seus históricos de conversa? Esta ação não pode ser desfeita.')) {
+      return;
+    }
+    try {
+      const res = await fetch('/api/dashboard/leads', { method: 'DELETE' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(`Erro ao limpar leads: ${data.error || 'Falha no servidor'}`);
+        return;
+      }
+      await loadLeads();
+      await loadStats();
+    } catch (err) {
+      alert(`Falha de conexão: ${err.message}`);
+    }
+  });
+
+  safeListen(btnRefreshAll, 'click', async () => {
+    if (btnRefreshAll) btnRefreshAll.style.opacity = '0.5';
     await loadStats();
     await loadLeads();
     await loadExports();
     await pollLogs();
     await fetchWhatsAppStatus();
     await loadWaDispatcherStatus();
-    btnRefreshAll.style.opacity = '1';
+    if (btnRefreshAll) btnRefreshAll.style.opacity = '1';
   });
 
-  btnRefreshExports.addEventListener('click', loadExports);
+  safeListen(btnRefreshExports, 'click', loadExports);
 
   function escapeHtml(str) {
     if (!str) return '';
@@ -1582,66 +1708,70 @@ document.addEventListener('DOMContentLoaded', () => {
     loginOverlay.classList.add('hidden');
   }
 
-  if (formLogin) {
-    formLogin.addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const password = loginPassword.value.trim();
-      if (!password) return;
+  safeListen(formLogin, 'submit', async (e) => {
+    e.preventDefault();
+    const password = loginPassword ? loginPassword.value.trim() : '';
+    if (!password) return;
 
-      btnLoginSubmit.disabled = true;
+    if (btnLoginSubmit) btnLoginSubmit.disabled = true;
+    if (loginFeedback) {
       loginFeedback.textContent = 'Verificando credenciais...';
       loginFeedback.className = 'feedback-text';
+    }
 
-      try {
-        const res = await originalFetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password })
-        });
-        const data = await res.json();
+    try {
+      const res = await originalFetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      const data = await res.json();
 
-        if (!res.ok || !data.success) {
+      if (!res.ok || !data.success) {
+        if (loginFeedback) {
           loginFeedback.textContent = data.error || 'Senha incorreta.';
           loginFeedback.className = 'feedback-text error';
-          btnLoginSubmit.disabled = false;
-          return;
         }
+        if (btnLoginSubmit) btnLoginSubmit.disabled = false;
+        return;
+      }
 
+      if (loginFeedback) {
         loginFeedback.textContent = 'Autenticado com sucesso!';
         loginFeedback.className = 'feedback-text success';
-        localStorage.setItem('legado_admin_token', data.token);
+      }
+      localStorage.setItem('legado_admin_token', data.token);
 
-        setTimeout(() => {
-          hideLoginOverlay();
-          btnLoginSubmit.disabled = false;
-          loginFeedback.textContent = '';
-          // Carrega painel
-          loadStats();
-          loadLeads();
-          loadExports();
-          pollLogs();
-          fetchWhatsAppStatus();
-          loadWaDispatcherStatus();
-        }, 400);
+      setTimeout(() => {
+        hideLoginOverlay();
+        if (btnLoginSubmit) btnLoginSubmit.disabled = false;
+        if (loginFeedback) loginFeedback.textContent = '';
+        // Carrega painel
+        loadStats();
+        loadLeads();
+        loadExports();
+        pollLogs();
+        fetchWhatsAppStatus();
+        loadWaDispatcherStatus();
+      }, 400);
 
-      } catch (err) {
+    } catch (err) {
+      if (loginFeedback) {
         loginFeedback.textContent = `Erro de conexão: ${err.message}`;
         loginFeedback.className = 'feedback-text error';
-        btnLoginSubmit.disabled = false;
       }
-    });
-  }
+      if (btnLoginSubmit) btnLoginSubmit.disabled = false;
+    }
+  });
 
-  if (btnLogout) {
-    btnLogout.addEventListener('click', async () => {
-      if (!confirm('Deseja encerrar a sessão do painel operacional?')) return;
-      try {
-        await originalFetch('/api/auth/logout', { method: 'POST' });
-      } catch {}
-      localStorage.removeItem('legado_admin_token');
-      showLoginOverlay();
-    });
-  }
+  safeListen(btnLogout, 'click', async () => {
+    if (!confirm('Deseja encerrar a sessão do painel operacional?')) return;
+    try {
+      await originalFetch('/api/auth/logout', { method: 'POST' });
+    } catch {}
+    localStorage.removeItem('legado_admin_token');
+    showLoginOverlay();
+  });
 
   // Inicialização com Verificação de Autenticação
   async function checkInitialAuth() {

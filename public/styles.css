@@ -213,11 +213,21 @@ body {
 }
 .wa-qr-wrapper {
   background: #ffffff;
-  border: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-md);
+  overflow: visible;
+}
+#waQrImage {
+  width: 240px !important;
+  height: 240px !important;
+  aspect-ratio: 1 / 1 !important;
+  object-fit: contain !important;
+  background: #ffffff !important;
+  padding: 12px !important;
+  border-radius: 12px !important;
+  margin: 0 auto !important;
 }
 
 /* Layout */
@@ -1136,7 +1146,8 @@ input:-webkit-autofill:active {
 }
 
 .modal-box-large {
-  max-width: 880px;
+  max-width: 920px;
+  max-height: 90vh;
 }
 
 .modal-tabs-nav {
@@ -1170,8 +1181,27 @@ input:-webkit-autofill:active {
 }
 .modal-content-tabs {
   padding: 20px;
-  max-height: calc(85vh - 160px);
+  max-height: calc(90vh - 130px);
   overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.btn-delete-lead {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 5px 6px;
+  border-radius: var(--radius-xs);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+}
+.btn-delete-lead:hover {
+  color: var(--red);
+  background: var(--red-surface);
+  border-color: var(--red-border);
 }
 .tab-pane.hidden {
   display: none;

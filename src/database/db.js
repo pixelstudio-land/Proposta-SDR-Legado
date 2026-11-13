@@ -325,8 +325,8 @@ class AppDatabase {
 
   createInstagramAccount({ username, password, role = 'scraper', proxy = null, daily_limit = 25 }) {
     const cleanUser = String(username).replace('@', '').trim();
-    if (!cleanUser || !password) {
-      throw new Error('Usuário e senha são obrigatórios.');
+    if (!cleanUser) {
+      throw new Error('Nome de usuário é obrigatório.');
     }
 
     const existing = this.getInstagramAccountByUsername(cleanUser);
@@ -336,7 +336,7 @@ class AppDatabase {
 
     const result = this.stmtInsertAccount.run(
       cleanUser,
-      password,
+      password ? String(password) : '',
       role === 'sender' ? 'sender' : 'scraper',
       proxy ? String(proxy).trim() : null,
       Number(daily_limit) || 25,
@@ -344,6 +344,22 @@ class AppDatabase {
     );
 
     return this.getInstagramAccountById(Number(result.lastInsertRowid));
+  }
+
+  deleteLead(id) {
+    if (!id) return false;
+    const leadId = Number(id);
+    this.db.prepare('DELETE FROM conversation_history WHERE lead_id = ?').run(leadId);
+    this.db.prepare('DELETE FROM message_logs WHERE lead_id = ?').run(leadId);
+    this.db.prepare('DELETE FROM leads WHERE id = ?').run(leadId);
+    return true;
+  }
+
+  clearAllLeads() {
+    this.db.prepare('DELETE FROM conversation_history').run();
+    this.db.prepare('DELETE FROM message_logs').run();
+    this.db.prepare('DELETE FROM leads').run();
+    return true;
   }
 
   updateInstagramAccountStatus(id, status, lastLoginAt = null) {
