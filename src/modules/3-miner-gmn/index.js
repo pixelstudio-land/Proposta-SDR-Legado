@@ -69,14 +69,27 @@ export async function runGmnPipeline(options = {}) {
       let isWhatsappActive = null;
       let leadStatus = 'new';
 
-      if (waStatus) {
-        if (waStatus.exists) {
+      const isOfflineOrError = !waStatus || waStatus.isOffline || (waStatus.error && !waStatus.exists);
+
+      if (isOfflineOrError) {
+        // WhatsApp Baileys NÃO conectado no momento da mineração:
+        if (item.phoneType === 'mobile') {
+          // Celulares recebem 1 por padrão para não serem descartados erroneamente como 'Sem WhatsApp'
           isWhatsappActive = 1;
           leadStatus = 'in_qualification';
         } else {
-          isWhatsappActive = 0;
-          leadStatus = 'no_whatsapp';
+          // Fixos comerciais aguardam validação posterior no Baileys
+          isWhatsappActive = null;
+          leadStatus = 'new';
         }
+      } else if (waStatus.exists) {
+        // Baileys conectado confirmou WhatsApp ativo
+        isWhatsappActive = 1;
+        leadStatus = 'in_qualification';
+      } else {
+        // Baileys conectado confirmou que NÃO tem WhatsApp
+        isWhatsappActive = 0;
+        leadStatus = 'no_whatsapp';
       }
 
       // O identificador único será o telefone (se válido) ou o próprio nome normalizado da empresa

@@ -37,7 +37,8 @@ export class WhatsAppValidationEngine {
           resultsMap.set(item.phone, {
             exists: Boolean(item.exists),
             jid: item.jid || null,
-            error: item.error || null
+            error: item.error || null,
+            isOffline: Boolean(item.isOffline)
           });
         }
       } catch (err) {
@@ -46,7 +47,8 @@ export class WhatsAppValidationEngine {
           resultsMap.set(phone, {
             exists: false,
             jid: null,
-            error: err.message
+            error: err.message,
+            isOffline: true
           });
         }
       }

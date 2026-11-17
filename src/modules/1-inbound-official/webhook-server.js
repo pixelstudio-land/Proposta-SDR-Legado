@@ -1191,17 +1191,30 @@ app.post('/api/dashboard/whatsapp-dispatcher/config', (req, res) => {
 });
 
 /**
- * POST /api/dashboard/validate-leads-wa
+ * POST /api/dashboard/validate-leads-wa (e alias /api/dashboard/revalidate-whatsapp)
  * Executa a checagem em lote de WhatsApp (waChecker) nos leads ainda não verificados
  */
-app.post('/api/dashboard/validate-leads-wa', async (req, res) => {
+app.post(['/api/dashboard/validate-leads-wa', '/api/dashboard/revalidate-whatsapp'], async (req, res) => {
   try {
-    const unverifiedLeads = db.db.prepare('SELECT id, phone FROM leads WHERE phone IS NOT NULL AND (is_whatsapp_active IS NULL OR is_whatsapp_active = -1 OR is_whatsapp_active = 0)').all();
+    const waStatus = getNativeStatus();
+    if (!waStatus.connected) {
+      return res.status(400).json({
+        success: false,
+        error: 'WhatsApp Baileys não está conectado. Conecte pelo QR Code no topo do painel antes de validar os leads.'
+      });
+    }
+
+    const unverifiedLeads = db.db.prepare(`
+      SELECT id, phone, phone_type, status 
+      FROM leads 
+      WHERE phone IS NOT NULL 
+        AND (is_whatsapp_active IS NULL OR is_whatsapp_active = -1 OR is_whatsapp_active = 0 OR status = 'no_whatsapp')
+    `).all();
 
     if (unverifiedLeads.length === 0) {
       return res.status(200).json({
         success: true,
-        message: 'Todos os leads com telefone já estão validados.',
+        message: 'Todos os leads com telefone já estão validados no WhatsApp.',
         checkedCount: 0,
         activeCount: 0
       });
@@ -1234,7 +1247,7 @@ app.post('/api/dashboard/validate-leads-wa', async (req, res) => {
       if (resItem && resItem.exists) {
         updateActiveStmt.run(lead.id);
         activeCount++;
-      } else if (resItem && !resItem.exists) {
+      } else if (resItem && !resItem.exists && !resItem.isOffline) {
         updateNoWaStmt.run(lead.id);
         noWaCount++;
       }

@@ -192,6 +192,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnOpenWaModalFromSettings = document.getElementById('btnOpenWaModalFromSettings');
   const btnValidateLeadsWa = document.getElementById('btnValidateLeadsWa');
   const waValidationFeedback = document.getElementById('waValidationFeedback');
+  const btnRevalidateWaTable = document.getElementById('btnRevalidateWaTable');
+  const btnRevalidateWaTableText = document.getElementById('btnRevalidateWaTableText');
 
   // Elementos do DOM - Login & Logout
   const loginOverlay = document.getElementById('loginOverlay');
@@ -1357,6 +1359,31 @@ document.addEventListener('DOMContentLoaded', () => {
         waValidationFeedback.className = 'feedback-text error';
       }
       if (btnValidateLeadsWa) btnValidateLeadsWa.disabled = false;
+    }
+  });
+
+  // Revalidação Rápida de WhatsApp diretamente no cabeçalho da tabela de leads
+  safeListen(btnRevalidateWaTable, 'click', async () => {
+    if (btnRevalidateWaTable) btnRevalidateWaTable.disabled = true;
+    if (btnRevalidateWaTableText) btnRevalidateWaTableText.textContent = 'Validando no WhatsApp...';
+
+    try {
+      const res = await fetch('/api/dashboard/revalidate-whatsapp', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Falha ao revalidar WhatsApp. Certifique-se de que o WhatsApp está conectado.');
+        return;
+      }
+
+      await loadLeads();
+      await loadStats();
+      alert(data.message || 'Leads revalidados com sucesso!');
+    } catch (err) {
+      alert(`Falha de conexão: ${err.message}`);
+    } finally {
+      if (btnRevalidateWaTable) btnRevalidateWaTable.disabled = false;
+      if (btnRevalidateWaTableText) btnRevalidateWaTableText.textContent = 'Revalidar WhatsApp';
     }
   });
 

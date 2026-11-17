@@ -91,6 +91,13 @@ export async function initNativeWhatsApp() {
         console.log(`👉 Número Conectado: +${connectedUserNumber}`);
         console.log('👉 Alertas de SDR e Validações Baileys 100% OPERACIONAIS');
         console.log('====================================================');
+
+        // Dispara revalidação automática de leads pendentes após handshake do WhatsApp
+        setTimeout(() => {
+          revalidateOfflineLeads().catch(err => {
+            console.warn('⚠️ [WhatsApp Nativo] Aviso na revalidação automática pós-conexão:', err.message);
+          });
+        }, 3500);
       }
 
       if (connection === 'close') {
@@ -240,20 +247,21 @@ export async function checkNumberOnWhatsApp(phone) {
     return {
       exists: false,
       connected: false,
+      isOffline: true,
       error: 'WhatsApp local não conectado. Conecte pelo QR Code primeiro.'
     };
   }
 
   const clean = normalizePhoneForWhatsApp(phone);
   if (!clean || clean.length < 10) {
-    return { exists: false, error: 'Telefone inválido ou curto demais' };
+    return { exists: false, isOffline: false, error: 'Telefone inválido ou curto demais' };
   }
 
   const jid1 = `${clean}@s.whatsapp.net`;
   try {
     const res1 = await sock.onWhatsApp(jid1);
     if (res1 && res1.length > 0 && res1[0].exists) {
-      return { exists: true, number: clean, jid: res1[0].jid };
+      return { exists: true, isOffline: false, number: clean, jid: res1[0].jid };
     }
 
     // Heurística de Resolução para o Brasil (DDI 55):
@@ -263,7 +271,7 @@ export async function checkNumberOnWhatsApp(phone) {
       const without9 = clean.slice(0, 4) + clean.slice(5);
       const res2 = await sock.onWhatsApp(`${without9}@s.whatsapp.net`);
       if (res2 && res2.length > 0 && res2[0].exists) {
-        return { exists: true, number: without9, jid: res2[0].jid };
+        return { exists: true, isOffline: false, number: without9, jid: res2[0].jid };
       }
     } 
     // 2. Se for 12 dígitos (55 + DDD + 8 dígitos) e o dígito inicial local for 6, 7, 8 ou 9,
@@ -272,16 +280,16 @@ export async function checkNumberOnWhatsApp(phone) {
       const with9 = clean.slice(0, 4) + '9' + clean.slice(4);
       const res3 = await sock.onWhatsApp(`${with9}@s.whatsapp.net`);
       if (res3 && res3.length > 0 && res3[0].exists) {
-        return { exists: true, number: with9, jid: res3[0].jid };
+        return { exists: true, isOffline: false, number: with9, jid: res3[0].jid };
       }
     }
 
     // Caso seja Fixo Comercial puro (ex: local iniciando em 2, 3, 4, 5) ou número sem WhatsApp:
     // O teste real já foi feito em jid1 acima sem ser descartado!
-    return { exists: false, number: clean, jid: null };
+    return { exists: false, isOffline: false, number: clean, jid: null };
   } catch (err) {
     console.warn(`⚠️ [WhatsApp Baileys onWhatsApp Error] (${clean}): ${err.message}`);
-    return { exists: false, error: err.message, number: clean, jid: null };
+    return { exists: false, isOffline: false, error: err.message, number: clean, jid: null };
   }
 }
 
@@ -293,6 +301,7 @@ export async function checkWhatsappNumbers(phonesArray = []) {
     return phonesArray.map(phone => ({
       phone: String(phone).replace(/\D/g, ''),
       exists: false,
+      isOffline: true,
       error: 'WhatsApp local não conectado'
     }));
   }
@@ -304,11 +313,84 @@ export async function checkWhatsappNumbers(phonesArray = []) {
       phone: String(phone).replace(/\D/g, ''),
       exists: Boolean(check.exists),
       jid: check.jid || null,
-      error: check.error || null
+      error: check.error || null,
+      isOffline: Boolean(check.isOffline)
     });
   }
 
   return results;
+}
+
+/**
+ * Revalidação automática em segundo plano quando o Baileys conecta
+ * Busca leads que estão sem validação ou que foram salvos como 'no_whatsapp' durante período offline
+ */
+export async function revalidateOfflineLeads() {
+  if (!sock || connectionState !== 'CONNECTED') {
+    return { success: false, error: 'WhatsApp não está conectado' };
+  }
+
+  try {
+    const leadsToRecheck = db.db.prepare(`
+      SELECT id, phone, phone_type, status, is_whatsapp_active 
+      FROM leads 
+      WHERE phone IS NOT NULL 
+        AND (is_whatsapp_active IS NULL OR is_whatsapp_active = 0 OR status = 'no_whatsapp')
+      ORDER BY id DESC
+      LIMIT 100
+    `).all();
+
+    if (!leadsToRecheck || leadsToRecheck.length === 0) {
+      console.log('ℹ️ [WhatsApp Nativo] Nenhum lead pendente de revalidação no banco.');
+      return { success: true, count: 0 };
+    }
+
+    console.log(`🔄 [WhatsApp Nativo] Revalidando automaticamente ${leadsToRecheck.length} leads no WhatsApp...`);
+
+    let activeCount = 0;
+    let noWaCount = 0;
+
+    const updateActiveStmt = db.db.prepare(`
+      UPDATE leads 
+      SET is_whatsapp_active = 1, 
+          status = CASE WHEN status = 'no_whatsapp' OR status = 'new' THEN 'in_qualification' ELSE status END, 
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `);
+
+    const updateNoWaStmt = db.db.prepare(`
+      UPDATE leads 
+      SET is_whatsapp_active = 0, 
+          status = 'no_whatsapp', 
+          updated_at = CURRENT_TIMESTAMP 
+      WHERE id = ?
+    `);
+
+    for (const lead of leadsToRecheck) {
+      if (!sock || connectionState !== 'CONNECTED') break;
+
+      try {
+        const check = await checkNumberOnWhatsApp(lead.phone);
+        if (check.exists) {
+          updateActiveStmt.run(lead.id);
+          activeCount++;
+        } else if (!check.isOffline) {
+          updateNoWaStmt.run(lead.id);
+          noWaCount++;
+        }
+      } catch (err) {
+        console.warn(`⚠️ [WhatsApp Nativo] Erro ao revalidar lead #${lead.id} (${lead.phone}):`, err.message);
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    console.log(`✅ [WhatsApp Nativo] Revalidação concluída: ${activeCount} ativos confirmados, ${noWaCount} sem WhatsApp.`);
+    return { success: true, activeCount, noWaCount, total: leadsToRecheck.length };
+  } catch (error) {
+    console.error('❌ [WhatsApp Nativo] Falha na rotina de revalidação automática:', error.message);
+    return { success: false, error: error.message };
+  }
 }
 
 /**
