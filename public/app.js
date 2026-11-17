@@ -182,11 +182,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const formApiSettings = document.getElementById('formApiSettings');
   const cfgOpenAiKey = document.getElementById('cfgOpenAiKey');
   const cfgSdrPhone = document.getElementById('cfgSdrPhone');
+  const cfgCrmDestination = document.getElementById('cfgCrmDestination');
+  const cfgIcpMinRevenue = document.getElementById('cfgIcpMinRevenue');
   const cfgCrmWebhook = document.getElementById('cfgCrmWebhook');
   const cfgCrmApiKey = document.getElementById('cfgCrmApiKey');
   const cfgWaMinDelay = document.getElementById('cfgWaMinDelay');
   const cfgWaMaxDelay = document.getElementById('cfgWaMaxDelay');
   const cfgWaPitchTemplate = document.getElementById('cfgWaPitchTemplate');
+  const cfgInstaColdTemplate = document.getElementById('cfgInstaColdTemplate');
+  const cfgAmandaInbound = document.getElementById('cfgAmandaInbound');
+  const cfgAmandaOutbound = document.getElementById('cfgAmandaOutbound');
+  const btnResetTemplates = document.getElementById('btnResetTemplates');
   const btnSaveConfig = document.getElementById('btnSaveConfig');
   const configFeedback = document.getElementById('configFeedback');
   const btnOpenWaModalFromSettings = document.getElementById('btnOpenWaModalFromSettings');
@@ -194,6 +200,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const waValidationFeedback = document.getElementById('waValidationFeedback');
   const btnRevalidateWaTable = document.getElementById('btnRevalidateWaTable');
   const btnRevalidateWaTableText = document.getElementById('btnRevalidateWaTableText');
+  const btnSyncCrmLead = document.getElementById('btnSyncCrmLead');
+  const btnSyncCrmLeadText = document.getElementById('btnSyncCrmLeadText');
 
   // Elementos do DOM - Login & Logout
   const loginOverlay = document.getElementById('loginOverlay');
@@ -1249,6 +1257,24 @@ document.addEventListener('DOMContentLoaded', () => {
   // ============================================================================
   async function loadConfig() {
     try {
+      // 1. Carregar lista de Kanbans/Destinos do CRM via Supabase
+      try {
+        const destRes = await fetch('/api/dashboard/crm-destinations');
+        const destData = await destRes.json();
+        if (destData.success && destData.destinations && cfgCrmDestination) {
+          cfgCrmDestination.innerHTML = '';
+          destData.destinations.forEach(d => {
+            const opt = document.createElement('option');
+            opt.value = d.token;
+            opt.textContent = `${d.title || d.name} (${d.email || d.role}) - [${d.token ? d.token.slice(0, 8) + '...' : ''}]`;
+            if (d.user_id) opt.dataset.userId = d.user_id;
+            cfgCrmDestination.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        console.warn('Erro ao carregar destinos CRM:', e);
+      }
+
       const res = await fetch('/api/dashboard/config');
       const data = await res.json();
       if (!data.success || !data.config) return;
@@ -1260,7 +1286,29 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cfgCrmApiKey && c.CRM_API_KEY) cfgCrmApiKey.value = c.CRM_API_KEY;
       if (cfgWaMinDelay && c.WHATSAPP_MIN_DELAY) cfgWaMinDelay.value = c.WHATSAPP_MIN_DELAY;
       if (cfgWaMaxDelay && c.WHATSAPP_MAX_DELAY) cfgWaMaxDelay.value = c.WHATSAPP_MAX_DELAY;
-      if (cfgWaPitchTemplate && c.WHATSAPP_PITCH_TEMPLATE) cfgWaPitchTemplate.value = c.WHATSAPP_PITCH_TEMPLATE;
+      if (cfgWaPitchTemplate && (c.WHATSAPP_COLD_PITCH_TEMPLATE || c.WHATSAPP_PITCH_TEMPLATE)) {
+        cfgWaPitchTemplate.value = c.WHATSAPP_COLD_PITCH_TEMPLATE || c.WHATSAPP_PITCH_TEMPLATE;
+      }
+      if (cfgInstaColdTemplate && c.INSTAGRAM_COLD_PITCH_TEMPLATE) {
+        cfgInstaColdTemplate.value = c.INSTAGRAM_COLD_PITCH_TEMPLATE;
+      }
+      if (cfgAmandaInbound && c.AMANDA_INBOUND_INSTRUCTIONS) {
+        cfgAmandaInbound.value = c.AMANDA_INBOUND_INSTRUCTIONS;
+      }
+      if (cfgAmandaOutbound && c.AMANDA_OUTBOUND_INSTRUCTIONS) {
+        cfgAmandaOutbound.value = c.AMANDA_OUTBOUND_INSTRUCTIONS;
+      }
+      if (cfgIcpMinRevenue && c.ICP_MIN_REVENUE) {
+        cfgIcpMinRevenue.value = c.ICP_MIN_REVENUE;
+      }
+      if (cfgCrmDestination && c.CRM_DESTINATION_TOKEN) {
+        cfgCrmDestination.value = c.CRM_DESTINATION_TOKEN;
+      } else if (cfgCrmDestination && c.CRM_WEBHOOK_URL) {
+        const parts = c.CRM_WEBHOOK_URL.split('/api/capture/');
+        if (parts[1]) {
+          cfgCrmDestination.value = parts[1].trim();
+        }
+      }
 
       // Configurações da Conta Principal Oficial (Meta / Inbound)
       if (cfgOfficialInstagram && c.OFFICIAL_INSTAGRAM_USER) cfgOfficialInstagram.value = c.OFFICIAL_INSTAGRAM_USER;
@@ -1270,6 +1318,15 @@ document.addEventListener('DOMContentLoaded', () => {
       console.error('Erro ao carregar configurações:', err);
     }
   }
+
+  // Atualiza automaticamente o webhook do CRM ao trocar o Kanban no select
+  safeListen(cfgCrmDestination, 'change', () => {
+    if (!cfgCrmDestination || !cfgCrmWebhook) return;
+    const token = cfgCrmDestination.value;
+    if (token) {
+      cfgCrmWebhook.value = `https://central.legadomidia.com/api/capture/${token}`;
+    }
+  });
 
   safeListen(formApiSettings, 'submit', async (e) => {
     e.preventDefault();
@@ -1284,9 +1341,15 @@ document.addEventListener('DOMContentLoaded', () => {
       SDR_NOTIFICATION_PHONE: cfgSdrPhone ? cfgSdrPhone.value.trim() : '',
       CRM_WEBHOOK_URL: cfgCrmWebhook ? cfgCrmWebhook.value.trim() : '',
       CRM_API_KEY: cfgCrmApiKey ? cfgCrmApiKey.value.trim() : '',
+      CRM_DESTINATION_TOKEN: cfgCrmDestination ? cfgCrmDestination.value.trim() : '',
+      ICP_MIN_REVENUE: cfgIcpMinRevenue ? parseInt(cfgIcpMinRevenue.value, 10) || 30000 : 30000,
       WHATSAPP_MIN_DELAY: cfgWaMinDelay ? parseInt(cfgWaMinDelay.value, 10) : 60,
       WHATSAPP_MAX_DELAY: cfgWaMaxDelay ? parseInt(cfgWaMaxDelay.value, 10) : 120,
-      WHATSAPP_PITCH_TEMPLATE: cfgWaPitchTemplate ? cfgWaPitchTemplate.value.trim() : ''
+      WHATSAPP_PITCH_TEMPLATE: cfgWaPitchTemplate ? cfgWaPitchTemplate.value.trim() : '',
+      WHATSAPP_COLD_PITCH_TEMPLATE: cfgWaPitchTemplate ? cfgWaPitchTemplate.value.trim() : '',
+      INSTAGRAM_COLD_PITCH_TEMPLATE: cfgInstaColdTemplate ? cfgInstaColdTemplate.value.trim() : '',
+      AMANDA_INBOUND_INSTRUCTIONS: cfgAmandaInbound ? cfgAmandaInbound.value.trim() : '',
+      AMANDA_OUTBOUND_INSTRUCTIONS: cfgAmandaOutbound ? cfgAmandaOutbound.value.trim() : ''
     };
 
     try {
@@ -1320,6 +1383,34 @@ document.addEventListener('DOMContentLoaded', () => {
         configFeedback.className = 'feedback-text error';
       }
       if (btnSaveConfig) btnSaveConfig.disabled = false;
+    }
+  });
+
+  // Restaurar templates de mensagens e instruções da IA para os padrões de fábrica
+  safeListen(btnResetTemplates, 'click', async () => {
+    if (!confirm('Deseja restaurar todos os templates e instruções da Amanda IA para o padrão original da Legado?')) {
+      return;
+    }
+    if (btnResetTemplates) btnResetTemplates.disabled = true;
+    try {
+      const res = await fetch('/api/dashboard/config/reset-templates', { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.templates) {
+        const t = data.templates;
+        if (cfgWaPitchTemplate) cfgWaPitchTemplate.value = t.WHATSAPP_COLD_PITCH_TEMPLATE || t.whatsapp_cold_pitch_template || '';
+        if (cfgInstaColdTemplate) cfgInstaColdTemplate.value = t.INSTAGRAM_COLD_PITCH_TEMPLATE || t.instagram_cold_pitch_template || '';
+        if (cfgAmandaInbound) cfgAmandaInbound.value = t.AMANDA_INBOUND_INSTRUCTIONS || t.amanda_inbound_instructions || '';
+        if (cfgAmandaOutbound) cfgAmandaOutbound.value = t.AMANDA_OUTBOUND_INSTRUCTIONS || t.amanda_outbound_instructions || '';
+        if (cfgIcpMinRevenue) cfgIcpMinRevenue.value = t.ICP_MIN_REVENUE || t.icp_min_revenue || 30000;
+        if (configFeedback) {
+          configFeedback.textContent = 'Textos e instruções restaurados para o padrão original com sucesso!';
+          configFeedback.className = 'feedback-text success';
+        }
+      }
+    } catch (err) {
+      alert('Erro ao restaurar textos padrão: ' + err.message);
+    } finally {
+      if (btnResetTemplates) btnResetTemplates.disabled = false;
     }
   });
 
@@ -1488,7 +1579,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Modal do Lead
+  let currentModalLeadId = null;
   async function openLeadModal(leadId) {
+    currentModalLeadId = leadId;
+    if (btnSyncCrmLead) {
+      btnSyncCrmLead.disabled = false;
+      if (btnSyncCrmLeadText) btnSyncCrmLeadText.textContent = 'Enviar Dossiê para o CRM';
+    }
     leadModal.classList.remove('hidden');
     modalCompanyName.textContent = 'Carregando...';
     modalIdentifier.textContent = '';
@@ -1558,6 +1655,35 @@ document.addEventListener('DOMContentLoaded', () => {
   safeListen(modalBtnClose, 'click', closeLeadModal);
   safeListen(leadModal, 'click', (e) => {
     if (e.target === leadModal) closeLeadModal();
+  });
+
+  // Ação manual: Enviar Dossiê Rico do Lead selecionado diretamente ao CRM e chat
+  safeListen(btnSyncCrmLead, 'click', async () => {
+    if (!currentModalLeadId) return;
+    if (btnSyncCrmLead) btnSyncCrmLead.disabled = true;
+    if (btnSyncCrmLeadText) btnSyncCrmLeadText.textContent = 'Enviando Dossiê ao CRM...';
+
+    try {
+      const res = await fetch(`/api/dashboard/leads/${currentModalLeadId}/sync-crm`, {
+        method: 'POST'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(`Erro ao sincronizar com CRM: ${data.error || 'Falha no servidor'}`);
+        if (btnSyncCrmLeadText) btnSyncCrmLeadText.textContent = 'Erro ao Enviar';
+      } else {
+        if (btnSyncCrmLeadText) btnSyncCrmLeadText.textContent = 'Dossiê Enviado ao CRM!';
+        await loadLeads();
+      }
+    } catch (err) {
+      alert(`Erro de conexão: ${err.message}`);
+      if (btnSyncCrmLeadText) btnSyncCrmLeadText.textContent = 'Falha de Conexão';
+    } finally {
+      setTimeout(() => {
+        if (btnSyncCrmLead) btnSyncCrmLead.disabled = false;
+        if (btnSyncCrmLeadText) btnSyncCrmLeadText.textContent = 'Enviar Dossiê para o CRM';
+      }, 3000);
+    }
   });
 
   document.addEventListener('keydown', (e) => {

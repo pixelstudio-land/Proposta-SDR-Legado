@@ -154,13 +154,27 @@ class OutboundMessenger {
           await this.ensureAuthenticated(page, context, currentSender);
         }
 
-        // 4. Gera a cópia personalizada usando o GPT-4o-mini
+        // 4. Gera a cópia personalizada usando o template configurado ou GPT-4o-mini
         console.log(`✍️ [Messenger] Gerando mensagem fria para ${lead.identifier}...`);
-        const messageText = await openaiClient.generateColdDM({
-          username,
-          niche: lead.niche,
-          bio: lead.ai_summary
-        });
+        const customInstaTemplate = db.getSetting('instagram_cold_pitch_template');
+        let messageText = '';
+        if (customInstaTemplate && customInstaTemplate.trim().length > 10) {
+          const company = lead.company_name || lead.name || `@${username}`;
+          const name = lead.name || username;
+          let niche = lead.niche || 'seu segmento';
+          if (niche.includes(',')) niche = niche.split(',')[0].trim();
+
+          messageText = customInstaTemplate
+            .replace(/{empresa}/gi, company)
+            .replace(/{nome}/gi, name)
+            .replace(/{nicho}/gi, niche);
+        } else {
+          messageText = await openaiClient.generateColdDM({
+            username,
+            niche: lead.niche,
+            bio: lead.ai_summary
+          });
+        }
 
         console.log(`💬 [Messenger] Mensagem gerada: "${messageText}"`);
 

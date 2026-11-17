@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
+import axios from 'axios';
 import { chromium } from 'playwright';
 import { settings } from '../../../config/settings.js';
 import db from '../../database/db.js';
@@ -8,6 +9,7 @@ import openaiClient from '../../ai/openai-client.js';
 import memoryManager from './memory-manager.js';
 import qualification from './qualification.js';
 import transbordo from './transbordo.js';
+import crmClient from '../../integrations/crm-client.js';
 import { runGmnPipeline } from '../3-miner-gmn/index.js';
 import { runOutboundPipeline } from '../2-outbound-instagram/index.js';
 import waChecker from '../3-miner-gmn/wa-checker.js';
@@ -929,6 +931,120 @@ app.post('/api/dashboard/accounts/:id/login', async (req, res) => {
 });
 
 /**
+ * GET /api/dashboard/crm-destinations
+ * Retorna os Kanbans e contas de destino disponíveis no CRM mapeados via Supabase
+ */
+app.get('/api/dashboard/crm-destinations', async (req, res) => {
+  const defaultDestinations = [
+    {
+      token: '72504a54-a2c1-4098-ac5d-038dfba26139',
+      profile_name: 'Legado Performance - Leads',
+      email: 'atendimento@legadomidia.com',
+      label: 'Legado Performance - Leads (atendimento@legadomidia.com) — Principal',
+      webhook_name: 'Legado performance'
+    },
+    {
+      token: '7715dfeb-16ae-4e17-982d-62a9a6848dd3',
+      profile_name: 'Legado Performance - Leads',
+      email: 'atendimento@legadomidia.com',
+      label: 'Legado 50K (atendimento@legadomidia.com)',
+      webhook_name: 'LEGADO 50K'
+    },
+    {
+      token: 'a366107c-8851-4389-acdd-7c65cfe24c4b',
+      profile_name: 'Legado Performance - Leads',
+      email: 'atendimento@legadomidia.com',
+      label: 'Legado de 20K a 50K (atendimento@legadomidia.com)',
+      webhook_name: 'LEGADO DE 20K A 50K'
+    },
+    {
+      token: '56fc43d8-961b-44b1-9153-1979ae9fb1ba',
+      profile_name: 'Legado Performance - Leads',
+      email: 'atendimento@legadomidia.com',
+      label: 'Legado 10K a 20K (atendimento@legadomidia.com)',
+      webhook_name: 'LEGADO 10K A 20K'
+    },
+    {
+      token: '275252b2-f9cf-4f44-a87c-94a014a1ae68',
+      profile_name: 'Leonardo',
+      email: 'legadomidia@gmail.com',
+      label: 'Leonardo - Respondi (legadomidia@gmail.com)',
+      webhook_name: 'respondi'
+    },
+    {
+      token: '82e63f3e-be1d-4470-b0b9-91500065832a',
+      profile_name: 'Leonardo',
+      email: 'legadomidia@gmail.com',
+      label: 'Leonardo - Teste Legado (legadomidia@gmail.com)',
+      webhook_name: 'teste legado'
+    },
+    {
+      token: '0621ea9f-b5ea-4b7a-9caf-0aa903d5e0ba',
+      profile_name: 'La Home',
+      email: 'lahomelegadomidia@gmail.com',
+      label: 'La Home (lahomelegadomidia@gmail.com)',
+      webhook_name: 'CAMPANHA [META]'
+    },
+    {
+      token: '93c2415a-6ade-4c9a-9240-7f71834b4376',
+      profile_name: 'EBM CONSTRUÇÃO',
+      email: 'ebmlegadomidia@gmail.com',
+      label: 'EBM Construção (ebmlegadomidia@gmail.com)',
+      webhook_name: 'CAMPANHA'
+    }
+  ];
+
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL || 'https://xndcrwpnwfmwxmulziwo.supabase.co';
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(200).json({ success: true, destinations: defaultDestinations });
+    }
+
+    const [usersRes, profilesRes, webhooksRes] = await Promise.all([
+      axios.get(`${supabaseUrl}/auth/v1/admin/users?per_page=100`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        timeout: 4000
+      }).catch(() => ({ data: { users: [] } })),
+      axios.get(`${supabaseUrl}/rest/v1/profiles?select=*`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        timeout: 4000
+      }).catch(() => ({ data: [] })),
+      axios.get(`${supabaseUrl}/rest/v1/capture_webhooks?select=*`, {
+        headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+        timeout: 4000
+      }).catch(() => ({ data: [] }))
+    ]);
+
+    const userMap = {};
+    (usersRes.data?.users || []).forEach(u => { userMap[u.id] = u.email; });
+
+    const profiles = profilesRes.data || [];
+    const webhooks = webhooksRes.data || [];
+
+    const dynamicDestinations = [];
+    for (const w of webhooks) {
+      if (!w.token) continue;
+      const profile = profiles.find(p => p.id === w.user_id);
+      const email = userMap[w.user_id] || '';
+      const profileName = profile?.full_name || profile?.name || 'Conta';
+      dynamicDestinations.push({
+        token: w.token,
+        profile_name: profileName,
+        email,
+        webhook_name: w.name,
+        label: `${profileName}${email ? ` (${email})` : ''} — ${w.name}`
+      });
+    }
+
+    const finalDestinations = dynamicDestinations.length > 0 ? dynamicDestinations : defaultDestinations;
+    return res.status(200).json({ success: true, destinations: finalDestinations });
+  } catch {
+    return res.status(200).json({ success: true, destinations: defaultDestinations });
+  }
+});
+
+/**
  * GET /api/dashboard/config
  * Retorna as credenciais e configurações salvas no SQLite / .env
  */
@@ -939,17 +1055,23 @@ app.get('/api/dashboard/config', (req, res) => {
       ? (rawOpenAiKey.slice(0, 7) + '...' + rawOpenAiKey.slice(-4))
       : rawOpenAiKey;
 
-    const currentPitch = db.getSetting('whatsapp_pitch_template') || whatsappDispatcher.pitchTemplate;
+    const currentColdPitch = db.getSetting('whatsapp_cold_pitch_template') || db.getSetting('whatsapp_pitch_template') || settings.defaults.whatsappColdPitchTemplate;
+    const currentInstaPitch = db.getSetting('instagram_cold_pitch_template') || settings.defaults.instagramColdPitchTemplate;
+    const currentAmandaInbound = db.getSetting('amanda_inbound_instructions') || settings.defaults.amandaInboundInstructions;
+    const currentAmandaOutbound = db.getSetting('amanda_outbound_instructions') || settings.defaults.amandaOutboundInstructions;
+    const currentIcpMinRevenue = Number(db.getSetting('icp_min_revenue')) || settings.defaults.icpMinRevenue || 30000;
+    const currentDestinationToken = db.getSetting('crm_destination_token') || settings.defaults.crmDestinationToken || '72504a54-a2c1-4098-ac5d-038dfba26139';
+
     const currentMinDelay = Number(db.getSetting('whatsapp_min_delay')) || whatsappDispatcher.minDelaySeconds || 60;
     const currentMaxDelay = Number(db.getSetting('whatsapp_max_delay')) || whatsappDispatcher.maxDelaySeconds || 120;
     const sdrPhone = db.getSetting('sdr_notification_phone') || process.env.SDR_NOTIFICATION_PHONE || settings.whatsapp.sdrNotificationPhone || '';
-    const crmUrl = db.getSetting('crm_webhook_url') || process.env.CRM_WEBHOOK_URL || settings.crm.webhookUrl || '';
+    const crmUrl = db.getSetting('crm_webhook_url') || process.env.CRM_WEBHOOK_URL || settings.crm.webhookUrl || `https://central.legadomidia.com/api/capture/${currentDestinationToken}`;
     const crmKey = db.getSetting('crm_api_key') || process.env.CRM_API_BEARER_TOKEN || settings.crm.bearerToken || '';
 
     // Parâmetros da Conta Oficial (Meta / Inbound)
     const officialUser = db.getSetting('official_instagram_user') || 'legadoperformance';
     const officialAiActive = db.getSetting('official_ai_enabled') !== '0' ? '1' : '0';
-    const officialIcpCriteria = db.getSetting('official_icp_criteria') || 'Faturamento mensal mínimo acima de R$ 30.000/mês em nichos de estética, saúde, clínicas e odontologia.';
+    const officialIcpCriteria = db.getSetting('official_icp_criteria') || `Faturamento mensal mínimo a partir de R$ ${currentIcpMinRevenue.toLocaleString('pt-BR')}/mês.`;
 
     return res.status(200).json({
       success: true,
@@ -958,7 +1080,13 @@ app.get('/api/dashboard/config', (req, res) => {
         SDR_NOTIFICATION_PHONE: sdrPhone,
         CRM_WEBHOOK_URL: crmUrl,
         CRM_API_KEY: crmKey,
-        WHATSAPP_PITCH_TEMPLATE: currentPitch,
+        CRM_DESTINATION_TOKEN: currentDestinationToken,
+        ICP_MIN_REVENUE: currentIcpMinRevenue,
+        WHATSAPP_COLD_PITCH_TEMPLATE: currentColdPitch,
+        WHATSAPP_PITCH_TEMPLATE: currentColdPitch,
+        INSTAGRAM_COLD_PITCH_TEMPLATE: currentInstaPitch,
+        AMANDA_INBOUND_INSTRUCTIONS: currentAmandaInbound,
+        AMANDA_OUTBOUND_INSTRUCTIONS: currentAmandaOutbound,
         WHATSAPP_MIN_DELAY: currentMinDelay,
         WHATSAPP_MAX_DELAY: currentMaxDelay,
         OFFICIAL_INSTAGRAM_USER: officialUser,
@@ -982,7 +1110,13 @@ app.post('/api/dashboard/config', (req, res) => {
       SDR_NOTIFICATION_PHONE,
       CRM_WEBHOOK_URL,
       CRM_API_KEY,
+      CRM_DESTINATION_TOKEN,
+      ICP_MIN_REVENUE,
+      WHATSAPP_COLD_PITCH_TEMPLATE,
       WHATSAPP_PITCH_TEMPLATE,
+      INSTAGRAM_COLD_PITCH_TEMPLATE,
+      AMANDA_INBOUND_INSTRUCTIONS,
+      AMANDA_OUTBOUND_INSTRUCTIONS,
       WHATSAPP_MIN_DELAY,
       WHATSAPP_MAX_DELAY,
       OFFICIAL_INSTAGRAM_USER,
@@ -997,15 +1131,39 @@ app.post('/api/dashboard/config', (req, res) => {
     if (SDR_NOTIFICATION_PHONE !== undefined) {
       db.setSetting('sdr_notification_phone', String(SDR_NOTIFICATION_PHONE).trim());
     }
-    if (CRM_WEBHOOK_URL !== undefined) {
+    if (CRM_DESTINATION_TOKEN !== undefined) {
+      const cleanToken = String(CRM_DESTINATION_TOKEN).trim();
+      db.setSetting('crm_destination_token', cleanToken);
+      const generatedUrl = `https://central.legadomidia.com/api/capture/${cleanToken}`;
+      db.setSetting('crm_webhook_url', generatedUrl);
+    } else if (CRM_WEBHOOK_URL !== undefined) {
       db.setSetting('crm_webhook_url', String(CRM_WEBHOOK_URL).trim());
     }
     if (CRM_API_KEY !== undefined) {
       db.setSetting('crm_api_key', String(CRM_API_KEY).trim());
     }
-    if (WHATSAPP_PITCH_TEMPLATE !== undefined) {
-      db.setSetting('whatsapp_pitch_template', String(WHATSAPP_PITCH_TEMPLATE).trim());
+
+    if (ICP_MIN_REVENUE !== undefined) {
+      const parsedRev = parseInt(String(ICP_MIN_REVENUE).replace(/\D/g, '') || '30000', 10);
+      db.setSetting('icp_min_revenue', parsedRev);
     }
+
+    const activeColdPitch = WHATSAPP_COLD_PITCH_TEMPLATE !== undefined ? WHATSAPP_COLD_PITCH_TEMPLATE : WHATSAPP_PITCH_TEMPLATE;
+    if (activeColdPitch !== undefined) {
+      db.setSetting('whatsapp_cold_pitch_template', String(activeColdPitch).trim());
+      db.setSetting('whatsapp_pitch_template', String(activeColdPitch).trim());
+    }
+
+    if (INSTAGRAM_COLD_PITCH_TEMPLATE !== undefined) {
+      db.setSetting('instagram_cold_pitch_template', String(INSTAGRAM_COLD_PITCH_TEMPLATE).trim());
+    }
+    if (AMANDA_INBOUND_INSTRUCTIONS !== undefined) {
+      db.setSetting('amanda_inbound_instructions', String(AMANDA_INBOUND_INSTRUCTIONS).trim());
+    }
+    if (AMANDA_OUTBOUND_INSTRUCTIONS !== undefined) {
+      db.setSetting('amanda_outbound_instructions', String(AMANDA_OUTBOUND_INSTRUCTIONS).trim());
+    }
+
     if (WHATSAPP_MIN_DELAY !== undefined) {
       db.setSetting('whatsapp_min_delay', parseInt(WHATSAPP_MIN_DELAY, 10));
     }
@@ -1026,7 +1184,7 @@ app.post('/api/dashboard/config', (req, res) => {
     whatsappDispatcher.updateConfig({
       minDelaySeconds: WHATSAPP_MIN_DELAY,
       maxDelaySeconds: WHATSAPP_MAX_DELAY,
-      pitchTemplate: WHATSAPP_PITCH_TEMPLATE
+      pitchTemplate: activeColdPitch
     });
 
     // 3. Atualiza arquivo .env para manter sincronização com a VPS
@@ -1048,7 +1206,8 @@ app.post('/api/dashboard/config', (req, res) => {
 
     if (OPENAI_API_KEY && !String(OPENAI_API_KEY).includes('...')) updateEnvVar('OPENAI_API_KEY', OPENAI_API_KEY.trim());
     if (SDR_NOTIFICATION_PHONE !== undefined) updateEnvVar('SDR_NOTIFICATION_PHONE', SDR_NOTIFICATION_PHONE);
-    if (CRM_WEBHOOK_URL !== undefined) updateEnvVar('CRM_WEBHOOK_URL', CRM_WEBHOOK_URL);
+    const finalCrmUrl = db.getSetting('crm_webhook_url');
+    if (finalCrmUrl) updateEnvVar('CRM_WEBHOOK_URL', finalCrmUrl);
     if (CRM_API_KEY !== undefined) updateEnvVar('CRM_API_BEARER_TOKEN', CRM_API_KEY);
 
     fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
@@ -1059,6 +1218,70 @@ app.post('/api/dashboard/config', (req, res) => {
       success: true,
       message: 'Configurações salvas no SQLite e aplicadas com sucesso!'
     });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/config/reset-templates
+ * Restaura os textos e instruções padrão de IA e mensagens
+ */
+app.post('/api/dashboard/config/reset-templates', (req, res) => {
+  try {
+    const templates = {
+      WHATSAPP_COLD_PITCH_TEMPLATE: settings.defaults.whatsappColdPitchTemplate,
+      INSTAGRAM_COLD_PITCH_TEMPLATE: settings.defaults.instagramColdPitchTemplate,
+      AMANDA_INBOUND_INSTRUCTIONS: settings.defaults.amandaInboundInstructions,
+      AMANDA_OUTBOUND_INSTRUCTIONS: settings.defaults.amandaOutboundInstructions,
+      ICP_MIN_REVENUE: settings.defaults.icpMinRevenue || 30000,
+      whatsapp_cold_pitch_template: settings.defaults.whatsappColdPitchTemplate,
+      instagram_cold_pitch_template: settings.defaults.instagramColdPitchTemplate,
+      amanda_inbound_instructions: settings.defaults.amandaInboundInstructions,
+      amanda_outbound_instructions: settings.defaults.amandaOutboundInstructions,
+      icp_min_revenue: settings.defaults.icpMinRevenue || 30000
+    };
+
+    // Também já grava no SQLite
+    db.setSetting('whatsapp_cold_pitch_template', templates.WHATSAPP_COLD_PITCH_TEMPLATE);
+    db.setSetting('instagram_cold_pitch_template', templates.INSTAGRAM_COLD_PITCH_TEMPLATE);
+    db.setSetting('amanda_inbound_instructions', templates.AMANDA_INBOUND_INSTRUCTIONS);
+    db.setSetting('amanda_outbound_instructions', templates.AMANDA_OUTBOUND_INSTRUCTIONS);
+    db.setSetting('icp_min_revenue', templates.ICP_MIN_REVENUE);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Textos padrão restaurados com sucesso.',
+      templates
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /api/dashboard/leads/:id/sync-crm
+ * Dispara manualmente o envio do lead para o CRM gerando o Dossiê completo
+ */
+app.post('/api/dashboard/leads/:id/sync-crm', async (req, res) => {
+  try {
+    const leadId = req.params.id;
+    const lead = db.getLeadById(leadId);
+    if (!lead) {
+      return res.status(404).json({ success: false, error: 'Lead não encontrado no banco.' });
+    }
+
+    appendLog('miner', `Enviando lead #${lead.id} (${lead.company_name || lead.name}) para o CRM...`, 'info');
+    const result = await crmClient.sendLeadToCrm(lead);
+
+    if (result.success) {
+      db.markLeadCrmSynced(lead.id);
+      appendLog('miner', `Lead #${lead.id} injetado com sucesso no CRM e Dossiê registrado!`, 'success');
+      return res.status(200).json({ success: true, message: 'Lead enviado e Dossiê injetado no CRM com sucesso!', result });
+    } else {
+      appendLog('miner', `Falha ao enviar lead #${lead.id} para o CRM: ${result.error}`, 'error');
+      return res.status(400).json({ success: false, error: result.error });
+    }
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

@@ -35,7 +35,29 @@ export const settings = {
   // CRM
   crm: {
     webhookUrl: process.env.CRM_WEBHOOK_URL || '',
-    bearerToken: process.env.CRM_API_BEARER_TOKEN || ''
+    bearerToken: process.env.CRM_API_BEARER_TOKEN || '',
+    defaultToken: '72504a54-a2c1-4098-ac5d-038dfba26139'
+  },
+
+  // Modelos e Padrões da Operação SDR IA
+  defaults: {
+    icpMinRevenue: 30000,
+    crmDestinationToken: '72504a54-a2c1-4098-ac5d-038dfba26139',
+    whatsappColdPitchTemplate: `{saudacao}, tudo bem? Vi a {empresa} aqui no Google ({nota} ★ com {avaliacoes} avaliações) em {cidade} e achei o posicionamento de vocês excelente.
+
+Acompanho o mercado de {nicho} e desenvolvemos uma operação comercial com IA para acelerar o fechamento de orçamentos e agendamentos diretamente no WhatsApp.
+
+Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria para a {empresa}?`,
+
+    instagramColdPitchTemplate: `Olá {nome}! Tudo bem? Vi o perfil da {empresa} no segmento de {nicho} e achei o trabalho de vocês de altíssimo nível.
+
+Nós desenvolvemos uma tecnologia de SDR com Inteligência Artificial para converter o tráfego e curiosos do Direct em reuniões e vendas no WhatsApp.
+
+Você teria 2 minutos para ver uma demonstração de como ficaria para a {empresa}?`,
+
+    amandaInboundInstructions: `O lead veio até a Legado pelo Instagram / ManyChat (inbound). Conduza uma triagem consultiva e empática: pergunte o nicho de atuação e valide se o faturamento mensal atual atinge a faixa de corte (R$ {meta_corte}/mês), explicando com naturalidade que essa informação serve para direcionar ao estrategista comercial ideal para o porte dele.`,
+
+    amandaOutboundInstructions: `Nós abordamos essa empresa de forma ativa no WhatsApp / Google Maps. PROIBIDO perguntar sobre faturamento logo no início (seria invasivo). Aja como uma consultora de negócios, gere valor, compreenda a dor no atendimento ou conversão de orçamentos e qualifique o lead pelo interesse na reunião estratégica de demonstração. Pergunte a faixa de faturamento apenas sutilmente no fechamento, ou aprove diretamente empresas já consolidadas e ativas.`
   },
 
   // Banco de Dados SQLite (WAL)

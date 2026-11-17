@@ -1,6 +1,67 @@
 import db from '../../database/db.js';
 import { sendNativeTextMessage, isNativeConnected } from '../../integrations/whatsapp-client.js';
 
+/**
+ * Formata dinamicamente o template de disparo frio de WhatsApp substituindo todas as variáveis contextuais
+ */
+export function formatTemplateMessage(template, lead) {
+  if (!template) return '';
+
+  const company = lead.company_name || lead.name || 'sua empresa';
+  const name = lead.name || 'tudo bem';
+  
+  // Nicho limpo
+  let niche = lead.niche || 'seu segmento';
+  if (niche.includes(',')) niche = niche.split(',')[0].trim();
+
+  // Extração de Cidade, Endereço, Nota e Avaliações do ai_summary
+  let address = '';
+  let city = 'sua região';
+  let rating = '5.0';
+  let reviews = 'várias';
+
+  if (lead.ai_summary) {
+    const matchAddr = lead.ai_summary.match(/Minerado GMN:\s*([^|]+)/i);
+    if (matchAddr && matchAddr[1]) address = matchAddr[1].trim();
+
+    const matchRating = lead.ai_summary.match(/Avaliação:\s*([\d,\.]+)\s*★?(?:\s*\(([\d\.]+)\s*avaliações\))?/i);
+    if (matchRating) {
+      if (matchRating[1]) rating = matchRating[1].trim();
+      if (matchRating[2]) reviews = matchRating[2].trim();
+    }
+  }
+
+  if (address) {
+    const parts = address.split('-');
+    if (parts.length >= 2) {
+      city = parts[parts.length - 2].trim().split(',').pop().trim();
+    }
+  } else if (lead.niche && lead.niche.includes('cidade')) {
+    city = lead.niche.split('cidade')[1].trim();
+  }
+
+  // Saudação de acordo com o horário de Brasília (UTC-3)
+  const now = new Date();
+  const brHour = (now.getUTCHours() - 3 + 24) % 24;
+  let saudacao = 'Olá';
+  if (brHour >= 5 && brHour < 12) {
+    saudacao = 'Bom dia';
+  } else if (brHour >= 12 && brHour < 18) {
+    saudacao = 'Boa tarde';
+  } else {
+    saudacao = 'Boa noite';
+  }
+
+  return template
+    .replace(/{empresa}/gi, company)
+    .replace(/{nome}/gi, name)
+    .replace(/{cidade}/gi, city)
+    .replace(/{nicho}/gi, niche)
+    .replace(/{nota}/gi, rating)
+    .replace(/{avaliacoes}/gi, reviews)
+    .replace(/{saudacao}/gi, saudacao);
+}
+
 class WhatsAppAutoDispatcher {
   constructor() {
     this.isRunning = false;
@@ -17,13 +78,13 @@ class WhatsAppAutoDispatcher {
     this.lastError = null;
 
     this.defaultTemplate = 
-`Olá, tudo bem? Vi a {empresa} aqui no Google e achei o posicionamento de vocês excelente.
+`{saudacao}, tudo bem? Vi a {empresa} aqui no Google ({nota} ★ com {avaliacoes} avaliações) em {cidade} e achei o posicionamento de vocês excelente.
 
 Acompanho o mercado de {nicho} e desenvolvemos uma operação comercial com IA para acelerar o fechamento de orçamentos e agendamentos diretamente no WhatsApp.
 
 Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria para a {empresa}?`;
 
-    const savedTemplate = db.getSetting('whatsapp_pitch_template');
+    const savedTemplate = db.getSetting('whatsapp_cold_pitch_template') || db.getSetting('whatsapp_pitch_template');
     this.pitchTemplate = savedTemplate || this.defaultTemplate;
   }
 
@@ -238,15 +299,10 @@ Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria p
       phone: lead.phone
     };
 
-    // 4. Monta a mensagem personalizada
+    // 4. Monta a mensagem personalizada com substituição de variáveis
     const company = lead.company_name || lead.name || 'sua empresa';
-    const niche = lead.niche || 'seu segmento';
-    const name = lead.name || 'tudo bem';
-
-    const messageText = this.pitchTemplate
-      .replace(/{empresa}/gi, company)
-      .replace(/{nicho}/gi, niche)
-      .replace(/{nome}/gi, name);
+    const activeTemplate = db.getSetting('whatsapp_cold_pitch_template') || db.getSetting('whatsapp_pitch_template') || this.pitchTemplate;
+    const messageText = formatTemplateMessage(activeTemplate, lead);
 
     console.log(`📤 [WhatsApp Dispatcher] Disparando prospecção para ${company} (${lead.phone})...`);
 

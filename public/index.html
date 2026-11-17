@@ -478,7 +478,15 @@
       </div>
 
       <div class="modal-foot">
-        <button id="modalBtnClose" class="btn btn-secondary btn-sm" type="button">Fechar Dossiê</button>
+        <div style="display: flex; gap: 8px; width: 100%; justify-content: space-between; align-items: center;">
+          <button id="btnSyncCrmLead" class="btn btn-primary-gold btn-sm" type="button" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+            </svg>
+            <span id="btnSyncCrmLeadText">Enviar Dossiê para o CRM</span>
+          </button>
+          <button id="modalBtnClose" class="btn btn-secondary btn-sm" type="button">Fechar Dossiê</button>
+        </div>
       </div>
     </div>
   </div>
@@ -719,22 +727,70 @@
             </button>
           </div>
 
-          <!-- Form Principal Limpo: WhatsApp do Vendedor & Mensagem de Abordagem -->
+          <!-- Form Principal: Destino CRM, Mensagens & Roteiros IA -->
           <form id="formApiSettings" class="settings-form-box" style="margin-top: 16px;" autocomplete="off">
+            
+            <!-- Seção 1: Destino no CRM & Parâmetros Comerciais -->
             <div class="settings-form-title">
-              <span>Mensagens e WhatsApp do Comercial</span>
+              <span>Destino no CRM &amp; Parâmetros Comerciais</span>
             </div>
             <div class="settings-grid">
               <div class="form-field span-2">
-                <label for="cfgSdrPhone" class="form-label">WhatsApp do Vendedor (Quem recebe os avisos de clientes prontos)</label>
+                <label for="cfgCrmDestination" class="form-label">Kanban / Conta de Destino no CRM</label>
+                <select id="cfgCrmDestination" class="form-input" style="font-size: 13px;">
+                  <option value="">Carregando contas do CRM...</option>
+                </select>
+                <span class="form-hint">Define dinamicamente para qual Kanban e usuário do <code>central.legadomidia.com</code> os leads qualificados serão transferidos com dossiê completo.</span>
+              </div>
+
+              <div class="form-field">
+                <label for="cfgIcpMinRevenue" class="form-label">Meta de Corte de Faturamento (R$)</label>
+                <input type="number" id="cfgIcpMinRevenue" class="form-input font-mono" value="30000" min="5000" step="5000">
+                <span class="form-hint">Critério de corte da Amanda IA para qualificar o lead como ICP.</span>
+              </div>
+
+              <div class="form-field">
+                <label for="cfgSdrPhone" class="form-label">WhatsApp do Vendedor (Alertas SDR)</label>
                 <input type="text" id="cfgSdrPhone" class="form-input font-mono" placeholder="5511999999999" autocomplete="new-password">
-                <span class="form-hint">Digite com DDI (55) e DDD. Este número recebe os alertas instantâneos com o resumo da empresa qualificada.</span>
+                <span class="form-hint">Recebe os avisos instantâneos com o resumo da empresa qualificada.</span>
+              </div>
+            </div>
+
+            <!-- Seção 2: Personalização de Mensagens & IA -->
+            <div class="settings-form-title" style="margin-top: 24px; display: flex; justify-content: space-between; align-items: center;">
+              <span>Personalização de Mensagens &amp; Roteiros IA</span>
+              <button type="button" id="btnResetTemplates" class="btn btn-secondary btn-sm" style="color: #f59e0b; border-color: rgba(245, 158, 11, 0.4); padding: 4px 10px; font-size: 11px;" title="Restaura os textos originais caso queira reiniciar a personalização">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+                  <path d="M3 3v5h5"/>
+                </svg>
+                <span>Restaurar Textos Padrão</span>
+              </button>
+            </div>
+
+            <div class="settings-grid">
+              <div class="form-field span-2">
+                <label for="cfgWaPitchTemplate" class="form-label">Mensagem Inicial — Disparo Frio WhatsApp (Google Maps)</label>
+                <textarea id="cfgWaPitchTemplate" class="form-input" rows="4" style="resize: vertical; font-size: 13px; line-height: 1.5; font-family: inherit;"></textarea>
+                <span class="form-hint">Variáveis disponíveis: <code>{empresa}</code>, <code>{cidade}</code>, <code>{nicho}</code>, <code>{nota}</code>, <code>{avaliacoes}</code> e <code>{saudacao}</code> (Bom dia/Boa tarde/Boa noite).</span>
               </div>
 
               <div class="form-field span-2">
-                <label for="cfgWaPitchTemplate" class="form-label">Mensagem de Abordagem Automática (Empresas do Google Maps)</label>
-                <textarea id="cfgWaPitchTemplate" class="form-input" rows="4" placeholder="Olá, tudo bem? Vi a {empresa} aqui no Google e notei que vocês atendem no segmento de {nicho}..." style="resize: vertical; font-size: 13px; line-height: 1.5;"></textarea>
-                <span class="form-hint">O sistema substitui automaticamente <code>{empresa}</code> pelo nome do negócio e <code>{nicho}</code> pela categoria minerada.</span>
+                <label for="cfgInstaColdTemplate" class="form-label">Mensagem Inicial — Outbound Instagram (DM Fria)</label>
+                <textarea id="cfgInstaColdTemplate" class="form-input" rows="3" style="resize: vertical; font-size: 13px; line-height: 1.5; font-family: inherit;"></textarea>
+                <span class="form-hint">Variáveis disponíveis: <code>{empresa}</code>, <code>{nome}</code> e <code>{nicho}</code>.</span>
+              </div>
+
+              <div class="form-field span-2">
+                <label for="cfgAmandaInbound" class="form-label">Instruções Comerciais da Amanda IA — Inbound (Direct / ManyChat)</label>
+                <textarea id="cfgAmandaInbound" class="form-input" rows="3" style="resize: vertical; font-size: 13px; line-height: 1.5; font-family: inherit;"></textarea>
+                <span class="form-hint">Define a postura consultiva e a justificativa para validar faturamento antes de direcionar ao estrategista. Formato JSON blindado no backend.</span>
+              </div>
+
+              <div class="form-field span-2">
+                <label for="cfgAmandaOutbound" class="form-label">Instruções Comerciais da Amanda IA — Disparo Frio (WhatsApp / Maps)</label>
+                <textarea id="cfgAmandaOutbound" class="form-input" rows="3" style="resize: vertical; font-size: 13px; line-height: 1.5; font-family: inherit;"></textarea>
+                <span class="form-hint">Proíbe perguntas invasivas no início e orienta qualificar pelo aceite da reunião estratégica. Formato JSON blindado no backend.</span>
               </div>
             </div>
 
