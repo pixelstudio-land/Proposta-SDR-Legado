@@ -17,8 +17,9 @@ class TargetScraper {
    * Inicializa o navegador e restaura a sessão salva (storageState)
    */
   async initBrowser(account) {
+    const isHeadless = process.env.NODE_ENV === 'production' || process.env.HEADLESS_BROWSER !== 'false';
     const launchOptions = {
-      headless: settings.outbound.headless,
+      headless: isHeadless,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',

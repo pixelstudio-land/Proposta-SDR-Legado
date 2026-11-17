@@ -70,7 +70,7 @@ app.get('/health', (req, res) => {
 /**
  * Rota Principal: Receptor de Webhook do ManyChat / Direct Oficial
  */
-app.post('/api/inbound/webhook', validateWebhookSecret, async (req, res) => {
+app.post(['/api/inbound/webhook', '/webhook/manychat'], validateWebhookSecret, async (req, res) => {
   const startTime = Date.now();
   let lead = null;
   const body = req.body || {};
@@ -825,14 +825,14 @@ app.post('/api/dashboard/accounts/:id/login', async (req, res) => {
 
   let browser = null;
   try {
+    const isHeadless = process.env.NODE_ENV === 'production' || process.env.HEADLESS_BROWSER !== 'false';
     const launchOptions = {
-      headless: false,
+      headless: isHeadless,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
-        '--start-maximized',
         '--disable-blink-features=AutomationControlled'
       ]
     };

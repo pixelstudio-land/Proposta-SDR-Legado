@@ -1915,11 +1915,75 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ============================================================================
-  // AUTENTICAÇÃO DO PAINEL OPERACIONAL (ADMIN_PASSWORD)
+  // AUTENTICAÇÃO DO PAINEL OPERACIONAL (ADMIN_PASSWORD) & CONSTELAÇÃO VISUAL
   // ============================================================================
+  let constellationInitialized = false;
+  function initConstellationBackground() {
+    if (constellationInitialized) return;
+    const canvas = document.getElementById('loginConstellationCanvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    constellationInitialized = true;
+
+    function resize() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    const nodes = [];
+    for (let i = 0; i < 75; i++) {
+      nodes.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        vx: (Math.random() - 0.5) * 0.35,
+        vy: (Math.random() - 0.5) * 0.35,
+      });
+    }
+
+    function animate() {
+      if (loginOverlay && loginOverlay.classList.contains('hidden')) {
+        requestAnimationFrame(animate);
+        return;
+      }
+      ctx.fillStyle = 'rgba(5, 7, 11, 0.35)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      nodes.forEach((node, i) => {
+        node.x += node.vx;
+        node.y += node.vy;
+        if (node.x < 0 || node.x > canvas.width) node.vx *= -1;
+        if (node.y < 0 || node.y > canvas.height) node.vy *= -1;
+
+        ctx.beginPath();
+        ctx.arc(node.x, node.y, 2, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0, 149, 255, 0.6)';
+        ctx.fill();
+
+        for (let j = i + 1; j < nodes.length; j++) {
+          const other = nodes[j];
+          const dist = Math.sqrt((node.x - other.x) ** 2 + (node.y - other.y) ** 2);
+          if (dist < 140) {
+            ctx.beginPath();
+            ctx.moveTo(node.x, node.y);
+            ctx.lineTo(other.x, other.y);
+            ctx.strokeStyle = `rgba(0, 149, 255, ${(1 - dist / 140) * 0.22})`;
+            ctx.lineWidth = 0.5;
+            ctx.stroke();
+          }
+        }
+      });
+      requestAnimationFrame(animate);
+    }
+    animate();
+  }
+
   function showLoginOverlay() {
     if (!loginOverlay) return;
     loginOverlay.classList.remove('hidden');
+    initConstellationBackground();
     if (loginPassword) {
       loginPassword.value = '';
       setTimeout(() => loginPassword.focus(), 150);

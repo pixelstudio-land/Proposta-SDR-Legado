@@ -3,24 +3,24 @@
    ============================================================================== */
 
 :root {
-  --bg-app: #09090b;
-  --bg-card: #111114;
-  --bg-card-subtle: #16161a;
-  --bg-input: #141417;
+  --bg-app: #05070B;
+  --bg-card: #0B0E14;
+  --bg-card-subtle: #10141D;
+  --bg-input: #1E2638;
 
-  --border-subtle: #222228;
-  --border-hover: #2e2e36;
-  --border-focus: #3f3f46;
+  --border-subtle: #1A2234;
+  --border-hover: #26334D;
+  --border-focus: #0095FF;
 
-  --text-primary: #f4f4f5;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-subtle: #52525b;
+  --text-primary: #FFFFFF;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+  --text-subtle: #475569;
 
-  --gold: #d4af37;
-  --gold-hover: #dfba41;
-  --gold-surface: rgba(212, 175, 55, 0.08);
-  --gold-border: rgba(212, 175, 55, 0.25);
+  --gold: #0095FF;
+  --gold-hover: #0082CC;
+  --gold-surface: rgba(0, 149, 255, 0.10);
+  --gold-border: rgba(0, 149, 255, 0.35);
 
   --emerald: #10b981;
   --emerald-surface: rgba(16, 185, 129, 0.08);
@@ -30,9 +30,10 @@
   --amber-surface: rgba(245, 158, 11, 0.08);
   --amber-border: rgba(245, 158, 11, 0.2);
 
-  --blue: #3b82f6;
-  --blue-surface: rgba(59, 130, 246, 0.08);
-  --blue-border: rgba(59, 130, 246, 0.2);
+  --blue: #0095FF;
+  --blue-hover: #0082CC;
+  --blue-surface: rgba(0, 149, 255, 0.12);
+  --blue-border: rgba(0, 149, 255, 0.35);
 
   --red: #ef4444;
   --red-surface: rgba(239, 68, 68, 0.08);
@@ -1680,26 +1681,212 @@ input:-webkit-autofill:active {
 }
 
 /* ==============================================================================
-   OVERLAY DE LOGIN ADMINISTRATIVO (LINEAR / SHADCN DARK)
+   OVERLAY DE LOGIN — IDENTIDADE VISUAL LEGADO PERFORMANCE (IDÊNTICA AO CRM)
    ============================================================================== */
 .login-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(9, 9, 11, 0.95);
-  backdrop-filter: blur(16px);
+  background-color: #050508;
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 9999;
+  z-index: 99999;
   padding: 20px;
+  overflow: hidden;
 }
-.login-card {
+
+.login-overlay.hidden {
+  display: none !important;
+}
+
+.login-constellation {
+  position: absolute;
+  inset: 0;
   width: 100%;
-  max-width: 400px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: 32px 28px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.75);
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.login-gradient-backdrop {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(0, 149, 255, 0.08) 0%, transparent 45%, rgba(0, 0, 0, 0.85) 100%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.login-scanline {
+  position: absolute;
+  inset-inline: 0;
+  height: 1px;
+  background: #0095FF;
+  opacity: 0.15;
+  pointer-events: none;
+  z-index: 3;
+  animation: scanline 8s linear infinite;
+}
+
+@keyframes scanline {
+  0% { top: -5%; }
+  100% { top: 105%; }
+}
+
+.login-wrapper {
+  position: relative;
+  z-index: 10;
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.login-header-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 24px;
   text-align: center;
+}
+
+.login-logo-hero {
+  height: 120px;
+  width: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 0 35px rgba(0, 149, 255, 0.5));
+}
+
+.login-hero-subtitle {
+  font-size: 11px;
+  color: #FFFFFF;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.6em;
+  margin-top: 10px;
+}
+
+.login-card-pro {
+  width: 100%;
+  background: rgba(11, 14, 20, 0.85);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 149, 255, 0.12);
+  overflow: hidden;
+}
+
+.login-card-header {
+  padding: 22px 24px 16px;
+  text-align: center;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.login-card-title {
+  font-size: 1.15rem;
+  font-weight: 300;
+  letter-spacing: 0.25em;
+  color: #FFFFFF;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.login-card-desc {
+  font-size: 9px;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  margin-top: 6px;
+  margin-bottom: 0;
+}
+
+.login-form-inner {
+  padding: 24px 28px 18px;
+}
+
+.form-field-pro {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 22px;
+  text-align: left;
+}
+
+.form-label-pro {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+}
+
+.form-input-pro {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0;
+  padding: 8px 0;
+  color: #FFFFFF;
+  font-size: 1rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+}
+
+.form-input-pro:focus {
+  border-bottom-color: #0095FF;
+  box-shadow: 0 1px 0 #0095FF;
+}
+
+.btn-connect-pro {
+  width: 100%;
+  height: 48px;
+  background: #0095FF;
+  color: #FFFFFF;
+  border: none;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 4px 25px rgba(0, 149, 255, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-connect-pro:hover {
+  background: #0082CC;
+  box-shadow: 0 6px 35px rgba(0, 149, 255, 0.65);
+  transform: translateY(-1px);
+}
+
+.btn-connect-pro:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-feedback-text {
+  font-size: 0.85rem;
+  margin-top: 12px;
+  text-align: center;
+  min-height: 20px;
+}
+
+.login-card-footer {
+  padding: 14px 24px;
+  text-align: center;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.login-card-footer p {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-weight: 800;
+  margin: 0;
 }

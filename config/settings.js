@@ -16,7 +16,7 @@ export const settings = {
     nodeEnv: process.env.NODE_ENV || 'development',
     webhookSecret: process.env.WEBHOOK_SECRET || 'default_secret',
     manychatApiKey: process.env.MANYCHAT_API_KEY || '',
-    adminPassword: process.env.ADMIN_PASSWORD || 'legado123'
+    adminPassword: process.env.PANEL_PASSWORD || process.env.ADMIN_PASSWORD || 'legado123'
   },
 
   // Motor OpenAI
@@ -29,7 +29,7 @@ export const settings = {
 
   // Gateway de WhatsApp Nativo Baileys
   whatsapp: {
-    sdrNotificationPhone: (process.env.SDR_NOTIFICATION_PHONE || '').replace(/\D/g, '')
+    sdrNotificationPhone: (process.env.ALERT_WHATSAPP || process.env.SDR_NOTIFICATION_PHONE || '').replace(/\D/g, '')
   },
 
   // CRM
@@ -40,7 +40,7 @@ export const settings = {
 
   // Banco de Dados SQLite (WAL)
   database: {
-    path: path.join(rootDir, 'config', 'database.sqlite'),
+    path: process.env.DATABASE_PATH || path.join(rootDir, 'data', 'database.sqlite'),
     schemaPath: path.join(rootDir, 'src', 'database', 'schema.sql')
   },
 

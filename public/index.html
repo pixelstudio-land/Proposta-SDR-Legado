@@ -8,22 +8,18 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <!-- Top Navigation Bar -->
   <header class="topbar">
     <div class="topbar-inner">
       <div class="brand">
-        <div class="brand-badge">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-        </div>
+        <img src="apple-icon.png" alt="Legado Performance" class="topbar-logo" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 0 14px rgba(0, 149, 255, 0.45)); margin-right: 10px;">
         <div class="brand-meta">
-          <span class="brand-name">LEGADO <span class="text-gold">SDR ENGINE</span></span>
-          <span class="brand-divider">/</span>
-          <span class="brand-scope">Operação Comercial 360°</span>
+          <span class="brand-name" style="font-weight: 700; letter-spacing: 0.08em; color: #ffffff;">LEGADO <span style="color: #0095FF;">PERFORMANCE</span></span>
+          <span class="brand-divider" style="color: rgba(255,255,255,0.2);">/</span>
+          <span class="brand-scope" style="color: #0095FF; font-weight: 600; letter-spacing: 0.05em;">SDR IA • MOTOR DE PROSPECÇÃO & QUALIFICAÇÃO</span>
         </div>
       </div>
 
@@ -936,41 +932,43 @@
     </div>
   </div>
 
-  <!-- Modal / Overlay de Login de Administrador -->
+  <!-- Modal / Overlay de Login de Administrador — Identidade Legado Performance Oficial -->
   <div id="loginOverlay" class="login-overlay hidden" role="dialog" aria-modal="true">
-    <div class="login-card">
-      <div class="login-brand">
-        <div class="brand-badge" style="width: 44px; height: 44px; margin: 0 auto 12px; display: flex; align-items: center; justify-content: center; background: var(--gold-surface); border: 1px solid var(--gold-border); border-radius: var(--radius-md);">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--gold)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
-          </svg>
-        </div>
-        <h2 style="font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; color: var(--text-primary); margin-bottom: 4px;">
-          LEGADO <span class="text-gold">SDR ENGINE</span>
-        </h2>
-        <p style="font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 20px;">
-          Acesso Restrito &bull; Digite a senha administrativa
-        </p>
+    <canvas id="loginConstellationCanvas" class="login-constellation"></canvas>
+    <div class="login-scanline"></div>
+    <div class="login-gradient-backdrop"></div>
+
+    <div class="login-wrapper">
+      <div class="login-header-hero">
+        <img src="apple-icon.png" alt="Legado Performance" class="login-logo-hero" />
+        <p class="login-hero-subtitle">PERFORMANCE EM INTEGRAÇÕES & ESCALA</p>
       </div>
 
-      <form id="formLogin" autocomplete="off">
-        <div class="form-field" style="margin-bottom: 16px; text-align: left;">
-          <label for="loginPassword" class="form-label">Senha de Administrador</label>
-          <input type="password" id="loginPassword" class="form-input" placeholder="••••••••••••" required autocomplete="current-password" autofocus style="font-size: 0.95rem; padding: 10px 14px;">
+      <div class="login-card-pro">
+        <div class="login-card-header">
+          <h2 class="login-card-title">ACESSO RESTRITO</h2>
+          <p class="login-card-desc">OPERAÇÃO LEGADO PERFORMANCE DIGITAL</p>
         </div>
 
-        <button type="submit" id="btnLoginSubmit" class="btn btn-primary-gold" style="width: 100%; justify-content: center; padding: 10px;">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/>
-            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-          </svg>
-          <span id="btnLoginText">Entrar no Painel</span>
-        </button>
-        <div id="loginFeedback" class="feedback-text" style="display: block; margin-top: 10px; text-align: center;"></div>
-      </form>
+        <form id="formLogin" class="login-form-inner" autocomplete="off">
+          <div class="form-field-pro">
+            <label for="loginPassword" class="form-label-pro">CHAVE MESTRA</label>
+            <input type="password" id="loginPassword" class="form-input-pro" placeholder="••••••••••••" required autocomplete="current-password" autofocus />
+          </div>
+
+          <button type="submit" id="btnLoginSubmit" class="btn-connect-pro">
+            <span id="btnLoginText">CONECTAR AO SISTEMA</span>
+          </button>
+          <div id="loginFeedback" class="login-feedback-text"></div>
+        </form>
+
+        <div class="login-card-footer">
+          <p>LEGADO PERFORMANCE DIGITAL © 2026</p>
+        </div>
+      </div>
     </div>
   </div>
 
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

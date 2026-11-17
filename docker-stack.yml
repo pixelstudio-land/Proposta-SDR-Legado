@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  app:
+    image: sdr-legado:v2
+    environment:
+      - PORT=3000
+      - NODE_ENV=production
+      - PANEL_PASSWORD=legado123
+      - ADMIN_PASSWORD=legado123
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ALERT_WHATSAPP=${ALERT_WHATSAPP:-5511913393797}
+      - SDR_NOTIFICATION_PHONE=${SDR_NOTIFICATION_PHONE:-5511913393797}
+      - CRM_WEBHOOK_URL=${CRM_WEBHOOK_URL}
+      - DATABASE_PATH=/app/data/database.sqlite
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+    ports:
+      - target: 3000
+        published: 3150
+        mode: host
+    volumes:
+      - /root/sdr-legado/data:/app/data
+      - /root/sdr-legado/config:/app/config
+    networks:
+      - servenet
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=servenet"
+        
+        # Rota 1: SSL imediato via sslip.io
+        - "traefik.http.routers.sdr-sslip.entrypoints=websecure"
+        - "traefik.http.routers.sdr-sslip.rule=Host(`sdr.187-124-91-244.sslip.io`)"
+        - "traefik.http.routers.sdr-sslip.tls=true"
+        - "traefik.http.routers.sdr-sslip.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.sdr-sslip.service=sdr-service"
+        
+        # Rota 2: Dominio Oficial (ativo assim que apontar DNS na HostGator)
+        - "traefik.http.routers.sdr-legado.entrypoints=websecure"
+        - "traefik.http.routers.sdr-legado.rule=Host(`sdr.legadomidia.com`)"
+        - "traefik.http.routers.sdr-legado.tls=true"
+        - "traefik.http.routers.sdr-legado.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.sdr-legado.service=sdr-service"
+        
+        # Servico Backend
+        - "traefik.http.services.sdr-service.loadbalancer.server.port=3000"
+
+networks:
+  servenet:
+    external: true

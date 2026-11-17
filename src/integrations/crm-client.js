@@ -35,7 +35,15 @@ class CrmIntegrationClient {
       niche: leadData.niche || 'Geral',
       revenue_range: leadData.revenue_range || 'Não informado',
       ai_summary: leadData.ai_summary || '',
-      created_at: leadData.created_at || new Date().toISOString()
+      created_at: leadData.created_at || new Date().toISOString(),
+
+      // Campos compatíveis com o Capture Webhook do CRM Legado
+      nome: leadData.name || leadData.company_name || 'Lead SDR IA',
+      numero: leadData.phone || null,
+      telefone: leadData.phone || null,
+      instagram: leadData.identifier || '',
+      faturamento: leadData.revenue_range || 'Não informado',
+      instalam: 'Sim'
     };
 
     const headers = {
@@ -53,6 +61,9 @@ class CrmIntegrationClient {
         timeout: 8000
       });
 
+      // Após o webhook criar o lead com sucesso, garantir que a origem seja atualizada de 'Outros' para a real ('Instagram', 'Google Maps' ou 'WhatsApp')
+      await this.ensureCorrectOrigin(leadData);
+
       return {
         success: true,
         statusCode: response.status,
@@ -68,6 +79,45 @@ class CrmIntegrationClient {
         statusCode: error.response?.status || 500,
         error: `Erro ao enviar lead para o CRM: ${errorMessage}`
       };
+    }
+  }
+
+  /**
+   * Força a origem correta no Supabase do CRM (já que a rota /api/capture do chat-legado grava hardcoded 'Outros')
+   */
+  async ensureCorrectOrigin(leadData) {
+    try {
+      const supabaseUrl = process.env.SUPABASE_URL || 'https://xndcrwpnwfmwxmulziwo.supabase.co';
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!supabaseUrl || !serviceKey || !leadData.phone) return;
+
+      let cleanPhone = String(leadData.phone).replace(/\D/g, '');
+      if (cleanPhone.startsWith('55') && cleanPhone.length >= 12) {
+        cleanPhone = cleanPhone.slice(2);
+      }
+
+      let realOrigin = 'Instagram';
+      if (leadData.source === 'miner_gmn' || leadData.source === 'google_maps') {
+        realOrigin = 'Google Maps';
+      } else if (leadData.source === 'whatsapp') {
+        realOrigin = 'WhatsApp';
+      }
+
+      await axios.patch(
+        `${supabaseUrl}/rest/v1/leads?whatsapp=eq.${cleanPhone}`,
+        { origin: realOrigin },
+        {
+          headers: {
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal'
+          },
+          timeout: 4000
+        }
+      );
+    } catch (err) {
+      console.warn(`[CRM] Aviso ao forçar origem do lead no Supabase: ${err.message}`);
     }
   }
 }
