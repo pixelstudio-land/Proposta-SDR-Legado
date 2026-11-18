@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Interceptador Global de Fetch para Autenticação Administrativa
   const originalFetch = window.fetch;
-  window.fetch = async function(...args) {
+  window.fetch = async function (...args) {
     let [resource, config] = args;
     config = config ? { ...config } : {};
 
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.require_auth) {
           showLoginOverlay();
         }
-      } catch {}
+      } catch { }
     }
 
     return response;
@@ -496,9 +496,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (lead.is_whatsapp_active === 1 || lead.is_whatsapp_active === '1') {
         waBadge = `<span class="badge-ui wa-active">${icons.check}<span>Ativo</span></span>`;
       } else if (
-        lead.is_whatsapp_active === 0 || 
-        lead.is_whatsapp_active === '0' || 
-        lead.status === 'no_whatsapp' || 
+        lead.is_whatsapp_active === 0 ||
+        lead.is_whatsapp_active === '0' ||
+        lead.status === 'no_whatsapp' ||
         lead.status === 'invalid'
       ) {
         waBadge = `<span class="badge-ui wa-none">${icons.x}<span>Sem WhatsApp</span></span>`;
@@ -746,7 +746,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Trava de segurança: Se o servidor rejeitar (HTTP 400 ou sem contas)
       if (!res.ok || !data.success) {
         const errorMsg = data.error || 'Nenhuma conta Scraper/Sender conectada. Cadastre e autentique suas contas primeiro.';
-        
+
         // Exibe erro em vermelho vivo e abre banner de alerta
         if (outboundFeedback) {
           outboundFeedback.textContent = errorMsg;
@@ -760,7 +760,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (outboundSpinner) outboundSpinner.classList.add('hidden');
         if (outboundBtnIcon) outboundBtnIcon.classList.remove('hidden');
         if (outboundBtnText) outboundBtnText.textContent = 'Disparar Outbound com IA';
-        
+
         // Registra log local no console
         appendConsoleLine(outboundConsoleLines, `[BLOQUEIO DE SEGURANÇA] ${errorMsg}`, 'error');
         return;
@@ -1266,7 +1266,7 @@ document.addEventListener('DOMContentLoaded', () => {
           destData.destinations.forEach(d => {
             const opt = document.createElement('option');
             opt.value = d.token;
-            opt.textContent = `${d.title || d.name} (${d.email || d.role}) - [${d.token ? d.token.slice(0, 8) + '...' : ''}]`;
+            opt.textContent = d.label || `${d.name || d.title || 'Legado Performance'} — ${d.email || 'atendimento@legadomidia.com'}`;
             if (d.user_id) opt.dataset.userId = d.user_id;
             cfgCrmDestination.appendChild(opt);
           });
@@ -2208,7 +2208,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!confirm('Deseja encerrar a sessão do painel operacional?')) return;
     try {
       await originalFetch('/api/auth/logout', { method: 'POST' });
-    } catch {}
+    } catch { }
     localStorage.removeItem('legado_admin_token');
     showLoginOverlay();
   });

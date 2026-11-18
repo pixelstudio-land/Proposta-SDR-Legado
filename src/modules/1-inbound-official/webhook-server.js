@@ -933,64 +933,45 @@ app.post('/api/dashboard/accounts/:id/login', async (req, res) => {
 /**
  * GET /api/dashboard/crm-destinations
  * Retorna os Kanbans e contas de destino disponíveis no CRM mapeados via Supabase
+ * Filtrado estritamente para o e-mail oficial atendimento@legadomidia.com
  */
 app.get('/api/dashboard/crm-destinations', async (req, res) => {
   const defaultDestinations = [
     {
       token: '72504a54-a2c1-4098-ac5d-038dfba26139',
+      name: 'Legado Performance (Principal)',
+      title: 'Legado Performance (Principal)',
       profile_name: 'Legado Performance - Leads',
       email: 'atendimento@legadomidia.com',
-      label: 'Legado Performance - Leads (atendimento@legadomidia.com) — Principal',
-      webhook_name: 'Legado performance'
+      webhook_name: 'Legado performance',
+      label: 'Legado Performance (Principal) — atendimento@legadomidia.com'
     },
     {
       token: '7715dfeb-16ae-4e17-982d-62a9a6848dd3',
+      name: 'Funil LEGADO 50K',
+      title: 'Funil LEGADO 50K',
       profile_name: 'Legado Performance - Leads',
       email: 'atendimento@legadomidia.com',
-      label: 'Legado 50K (atendimento@legadomidia.com)',
-      webhook_name: 'LEGADO 50K'
+      webhook_name: 'LEGADO 50K',
+      label: 'Funil LEGADO 50K — atendimento@legadomidia.com'
     },
     {
       token: 'a366107c-8851-4389-acdd-7c65cfe24c4b',
+      name: 'Funil LEGADO 20K A 50K',
+      title: 'Funil LEGADO 20K A 50K',
       profile_name: 'Legado Performance - Leads',
       email: 'atendimento@legadomidia.com',
-      label: 'Legado de 20K a 50K (atendimento@legadomidia.com)',
-      webhook_name: 'LEGADO DE 20K A 50K'
+      webhook_name: 'LEGADO DE 20K A 50K',
+      label: 'Funil LEGADO 20K A 50K — atendimento@legadomidia.com'
     },
     {
       token: '56fc43d8-961b-44b1-9153-1979ae9fb1ba',
+      name: 'Funil LEGADO 10K A 20K',
+      title: 'Funil LEGADO 10K A 20K',
       profile_name: 'Legado Performance - Leads',
       email: 'atendimento@legadomidia.com',
-      label: 'Legado 10K a 20K (atendimento@legadomidia.com)',
-      webhook_name: 'LEGADO 10K A 20K'
-    },
-    {
-      token: '275252b2-f9cf-4f44-a87c-94a014a1ae68',
-      profile_name: 'Leonardo',
-      email: 'legadomidia@gmail.com',
-      label: 'Leonardo - Respondi (legadomidia@gmail.com)',
-      webhook_name: 'respondi'
-    },
-    {
-      token: '82e63f3e-be1d-4470-b0b9-91500065832a',
-      profile_name: 'Leonardo',
-      email: 'legadomidia@gmail.com',
-      label: 'Leonardo - Teste Legado (legadomidia@gmail.com)',
-      webhook_name: 'teste legado'
-    },
-    {
-      token: '0621ea9f-b5ea-4b7a-9caf-0aa903d5e0ba',
-      profile_name: 'La Home',
-      email: 'lahomelegadomidia@gmail.com',
-      label: 'La Home (lahomelegadomidia@gmail.com)',
-      webhook_name: 'CAMPANHA [META]'
-    },
-    {
-      token: '93c2415a-6ade-4c9a-9240-7f71834b4376',
-      profile_name: 'EBM CONSTRUÇÃO',
-      email: 'ebmlegadomidia@gmail.com',
-      label: 'EBM Construção (ebmlegadomidia@gmail.com)',
-      webhook_name: 'CAMPANHA'
+      webhook_name: 'LEGADO 10K A 20K',
+      label: 'Funil LEGADO 10K A 20K — atendimento@legadomidia.com'
     }
   ];
 
@@ -1017,28 +998,54 @@ app.get('/api/dashboard/crm-destinations', async (req, res) => {
     ]);
 
     const userMap = {};
-    (usersRes.data?.users || []).forEach(u => { userMap[u.id] = u.email; });
+    (usersRes.data?.users || []).forEach(u => { userMap[u.id] = (u.email || '').toLowerCase().trim(); });
 
-    const profiles = profilesRes.data || [];
     const webhooks = webhooksRes.data || [];
 
     const dynamicDestinations = [];
     for (const w of webhooks) {
       if (!w.token) continue;
-      const profile = profiles.find(p => p.id === w.user_id);
       const email = userMap[w.user_id] || '';
-      const profileName = profile?.full_name || profile?.name || 'Conta';
+
+      // Filtra estritamente o e-mail oficial de atendimento da Legado
+      if (email !== 'atendimento@legadomidia.com') continue;
+
+      let name = 'Legado Performance';
+      if (w.token === '72504a54-a2c1-4098-ac5d-038dfba26139') {
+        name = 'Legado Performance (Principal)';
+      } else if (w.token === '7715dfeb-16ae-4e17-982d-62a9a6848dd3') {
+        name = 'Funil LEGADO 50K';
+      } else if (w.token === 'a366107c-8851-4389-acdd-7c65cfe24c4b') {
+        name = 'Funil LEGADO 20K A 50K';
+      } else if (w.token === '56fc43d8-961b-44b1-9153-1979ae9fb1ba') {
+        name = 'Funil LEGADO 10K A 20K';
+      } else if (w.name) {
+        name = `Funil ${w.name}`;
+      }
+
       dynamicDestinations.push({
         token: w.token,
-        profile_name: profileName,
-        email,
+        name,
+        title: name,
+        profile_name: 'Legado Performance - Leads',
+        email: 'atendimento@legadomidia.com',
         webhook_name: w.name,
-        label: `${profileName}${email ? ` (${email})` : ''} — ${w.name}`
+        label: `${name} — atendimento@legadomidia.com`
       });
     }
 
-    const finalDestinations = dynamicDestinations.length > 0 ? dynamicDestinations : defaultDestinations;
-    return res.status(200).json({ success: true, destinations: finalDestinations });
+    if (dynamicDestinations.length > 0) {
+      const orderPriority = {
+        '72504a54-a2c1-4098-ac5d-038dfba26139': 1,
+        '7715dfeb-16ae-4e17-982d-62a9a6848dd3': 2,
+        'a366107c-8851-4389-acdd-7c65cfe24c4b': 3,
+        '56fc43d8-961b-44b1-9153-1979ae9fb1ba': 4
+      };
+      dynamicDestinations.sort((a, b) => (orderPriority[a.token] || 99) - (orderPriority[b.token] || 99));
+      return res.status(200).json({ success: true, destinations: dynamicDestinations });
+    }
+
+    return res.status(200).json({ success: true, destinations: defaultDestinations });
   } catch {
     return res.status(200).json({ success: true, destinations: defaultDestinations });
   }
