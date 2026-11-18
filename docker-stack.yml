@@ -32,22 +32,22 @@ services:
         - "traefik.enable=true"
         - "traefik.docker.network=servenet"
         
-        # Rota 1: SSL imediato via sslip.io
-        - "traefik.http.routers.sdr-sslip.entrypoints=websecure"
-        - "traefik.http.routers.sdr-sslip.rule=Host(`sdr.187-124-91-244.sslip.io`)"
-        - "traefik.http.routers.sdr-sslip.tls=true"
-        - "traefik.http.routers.sdr-sslip.tls.certresolver=letsencryptresolver"
-        - "traefik.http.routers.sdr-sslip.service=sdr-service"
+        # Rota 1: Dominio Oficial Legado Performance
+        - "traefik.http.routers.sdrlegado.entrypoints=websecure"
+        - "traefik.http.routers.sdrlegado.rule=Host(`sdr.legadomidia.com`)"
+        - "traefik.http.routers.sdrlegado.tls=true"
+        - "traefik.http.routers.sdrlegado.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.sdrlegado.service=sdrlegado"
         
-        # Rota 2: Dominio Oficial (ativo assim que apontar DNS na HostGator)
-        - "traefik.http.routers.sdr-legado.entrypoints=websecure"
-        - "traefik.http.routers.sdr-legado.rule=Host(`sdr.legadomidia.com`)"
-        - "traefik.http.routers.sdr-legado.tls=true"
-        - "traefik.http.routers.sdr-legado.tls.certresolver=letsencryptresolver"
-        - "traefik.http.routers.sdr-legado.service=sdr-service"
+        # Rota 2: SSL imediato via sslip.io
+        - "traefik.http.routers.sdrsslip.entrypoints=websecure"
+        - "traefik.http.routers.sdrsslip.rule=Host(`sdr.187-124-91-244.sslip.io`)"
+        - "traefik.http.routers.sdrsslip.tls=true"
+        - "traefik.http.routers.sdrsslip.tls.certresolver=letsencryptresolver"
+        - "traefik.http.routers.sdrsslip.service=sdrlegado"
         
         # Servico Backend
-        - "traefik.http.services.sdr-service.loadbalancer.server.port=3000"
+        - "traefik.http.services.sdrlegado.loadbalancer.server.port=3000"
 
 networks:
   servenet:

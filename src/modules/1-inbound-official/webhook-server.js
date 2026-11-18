@@ -92,10 +92,10 @@ app.post(['/api/inbound/webhook', '/webhook/manychat'], validateWebhookSecret, a
     }
 
     // Detecção e suporte a Gatilhos de Primeira Interação (Stories, Reels e Comentários)
-    const isStoryTrigger = body.event === 'story_reply' || body.event === 'story_reaction' || 
+    const isStoryTrigger = body.event === 'story_reply' || body.event === 'story_reaction' ||
       body.trigger === 'story_reaction' || body.story_reply || Boolean(body.reaction);
 
-    const isCommentTrigger = body.event === 'comment' || body.event === 'post_comment' || 
+    const isCommentTrigger = body.event === 'comment' || body.event === 'post_comment' ||
       body.event === 'reel_comment' || body.trigger === 'comment' || Boolean(body.comment) || Boolean(body.comment_text);
 
     if (isStoryTrigger) {
@@ -256,20 +256,20 @@ function routeConsoleToLog(level, args) {
     }
 
     appendLog(moduleName, raw, logLvl);
-  } catch (_) {}
+  } catch (_) { }
 }
 
-console.log = function(...args) {
+console.log = function (...args) {
   origConsoleLog.apply(console, args);
   routeConsoleToLog('info', args);
 };
 
-console.warn = function(...args) {
+console.warn = function (...args) {
   origConsoleWarn.apply(console, args);
   routeConsoleToLog('warn', args);
 };
 
-console.error = function(...args) {
+console.error = function (...args) {
   origConsoleError.apply(console, args);
   routeConsoleToLog('error', args);
 };
@@ -545,7 +545,7 @@ function saveSessionCookiesForAccount(account, { sessionid, storageState, cookie
         if (parsed && (parsed.cookies || Array.isArray(parsed))) {
           finalStorageState = Array.isArray(parsed) ? { cookies: parsed, origins: [{ origin: 'https://www.instagram.com', localStorage: [] }] } : parsed;
         }
-      } catch (_) {}
+      } catch (_) { }
     } else if (typeof storageState === 'object' && storageState.cookies) {
       finalStorageState = storageState;
     }
