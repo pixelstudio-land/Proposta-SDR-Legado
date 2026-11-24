@@ -236,6 +236,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const waSessionSelect = document.getElementById('waSessionSelect');
   const waChipsQuotaBadge = document.getElementById('waChipsQuotaBadge');
   const btnWaAddSession = document.getElementById('btnWaAddSession');
+  const btnWaDeleteSession = document.getElementById('btnWaDeleteSession');
   const waStatusBanner = document.getElementById('waStatusBanner');
   const waModalPulseDot = document.getElementById('waModalPulseDot');
   const waModalStatusTitle = document.getElementById('waModalStatusTitle');
@@ -248,6 +249,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const btnWaRefreshQr = document.getElementById('btnWaRefreshQr');
   const btnWaDisconnectSession = document.getElementById('btnWaDisconnectSession');
   let waModalPollInterval = null;
+  let waQrEventSource = null;
 
   // Elementos do DOM - Fila de Disparo Automático WhatsApp
   const waDispatcherStatusBadge = document.getElementById('waDispatcherStatusBadge');
@@ -1857,7 +1859,10 @@ document.addEventListener('DOMContentLoaded', () => {
         const opt = document.createElement('option');
         opt.value = String(s.id);
         const phoneSuffix = s.phone_number ? ` (+${s.phone_number})` : '';
-        const statusSuffix = s.connected ? ' • Online' : '';
+        let statusSuffix = '';
+        if (s.state === 'RESTRITO') statusSuffix = ' [RESTRITO]';
+        else if (s.connected) statusSuffix = ' • Online';
+        else if (s.state === 'QR_READY') statusSuffix = ' • Ler QR';
         opt.textContent = `${s.session_name}${phoneSuffix}${statusSuffix}`;
         if (targetId && Number(s.id) === Number(targetId)) {
           opt.selected = true;
@@ -1878,6 +1883,10 @@ document.addEventListener('DOMContentLoaded', () => {
       btnWaAddSession.title = sessions.length >= limit
         ? `Limite de ${limit} chip(s) atingido para sua conta`
         : 'Adicionar novo chip WhatsApp dentro do seu limite';
+    }
+
+    if (btnWaDeleteSession && Array.isArray(sessions)) {
+      btnWaDeleteSession.disabled = sessions.length === 0 || !selectedWaSessionId;
     }
   }
 
@@ -2065,6 +2074,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (waConnectedNotice) waConnectedNotice.style.display = 'none';
         if (waQrImage) waQrImage.style.display = 'none';
         if (waQrSpinner) waQrSpinner.style.display = 'flex';
+      } else if (status.state === 'RESTRITO') {
+        waStatusBanner.classList.add('disconnected');
+        if (waModalPulseDot) {
+          waModalPulseDot.style.backgroundColor = 'var(--red)';
+          waModalPulseDot.style.boxShadow = '0 0 6px var(--red)';
+        }
+        if (waModalStatusTitle) {
+          waModalStatusTitle.textContent = 'Chip Restrito pela Meta';
+          waModalStatusTitle.style.color = 'var(--red)';
+        }
+        if (waModalStatusDesc) {
+          waModalStatusDesc.textContent = 'Este chip atingiu restrição (401/403/428) e foi isolado da fila. Clique em "Regerar QR / Reconectar" ou exclua o chip.';
+        }
+
+        if (waConnectedNotice) waConnectedNotice.style.display = 'none';
+        if (waQrImage) waQrImage.style.display = 'none';
+        if (waQrSpinner) waQrSpinner.style.display = 'flex';
       } else {
         waStatusBanner.classList.add('disconnected');
         if (waModalPulseDot) {
@@ -2076,7 +2102,7 @@ document.addEventListener('DOMContentLoaded', () => {
           waModalStatusTitle.style.color = 'var(--red)';
         }
         if (waModalStatusDesc) {
-          waModalStatusDesc.textContent = 'Clique em "Regerar QR / Reconectar" para iniciar nova sessão.';
+          waModalStatusDesc.textContent = 'Inicializando ou clique em "Regerar QR / Reconectar" para gerar o QR Code.';
         }
 
         if (waConnectedNotice) waConnectedNotice.style.display = 'none';
@@ -2086,22 +2112,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  function closeWaQrStream() {
+    if (waQrEventSource) {
+      try {
+        waQrEventSource.close();
+      } catch { }
+      waQrEventSource = null;
+    }
+    if (waModalPollInterval) {
+      clearInterval(waModalPollInterval);
+      waModalPollInterval = null;
+    }
+  }
+
+  function startWaQrStream() {
+    closeWaQrStream();
+    if (!waModal || waModal.classList.contains('hidden')) return;
+
+    const targetChipId = selectedWaSessionId;
+    const qs = targetChipId ? `&sessionId=${encodeURIComponent(targetChipId)}` : '';
+
+    if (typeof window.EventSource === 'function') {
+      waQrEventSource = new EventSource(`/api/whatsapp/qr?stream=1${qs}`);
+      waQrEventSource.addEventListener('qr', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (!data || !data.success || data.deleted) return;
+          if (selectedWaSessionId && data.activeSession && Number(data.activeSession.id) !== Number(selectedWaSessionId)) {
+            return;
+          }
+          if (data.activeSession && data.activeSession.id) {
+            selectedWaSessionId = Number(data.activeSession.id);
+          }
+          renderWaSessionsDropdown(data.sessions, data.maxChips, selectedWaSessionId);
+          renderWhatsAppStatus(data, data.qr);
+        } catch { }
+      });
+      waQrEventSource.onerror = () => {
+        if (!waModalPollInterval && waModal && !waModal.classList.contains('hidden')) {
+          waModalPollInterval = setInterval(fetchWhatsAppQr, 2500);
+        }
+      };
+    }
+
+    // Fallback leve de segurança caso proxy segure SSE
+    waModalPollInterval = setInterval(() => {
+      if (!waModal || waModal.classList.contains('hidden')) return;
+      fetchWhatsAppQr();
+    }, 3500);
+  }
+
   function openWhatsAppModal() {
     if (!waModal) return;
     waModal.classList.remove('hidden');
-    fetchWhatsAppQr();
-
-    if (waModalPollInterval) clearInterval(waModalPollInterval);
-    waModalPollInterval = setInterval(fetchWhatsAppQr, 2500);
+    fetchWhatsAppQr().then(() => {
+      startWaQrStream();
+    });
   }
 
   function closeWhatsAppModal() {
     if (!waModal) return;
     waModal.classList.add('hidden');
-    if (waModalPollInterval) {
-      clearInterval(waModalPollInterval);
-      waModalPollInterval = null;
-    }
+    closeWaQrStream();
   }
 
   safeListen(btnWaIndicator, 'click', openWhatsAppModal);
@@ -2116,11 +2188,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === waModal) closeWhatsAppModal();
   });
 
-  safeListen(waSessionSelect, 'change', () => {
+  safeListen(waSessionSelect, 'change', async () => {
     const val = Number(waSessionSelect.value);
     if (!Number.isNaN(val) && val > 0) {
       selectedWaSessionId = val;
-      fetchWhatsAppQr();
+      if (waQrImage) waQrImage.style.display = 'none';
+      if (waConnectedNotice) waConnectedNotice.style.display = 'none';
+      if (waQrSpinner) waQrSpinner.style.display = 'flex';
+      if (waModalStatusTitle) waModalStatusTitle.textContent = 'Carregando sessão do chip...';
+      await fetchWhatsAppQr();
+      startWaQrStream();
     }
   });
 
@@ -2128,6 +2205,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const suggestedName = `Chip ${(waSessionSelect?.options?.length || 0) + 1}`;
     const sessionName = prompt('Digite um nome identificador para o novo chip WhatsApp:', suggestedName);
     if (!sessionName || !sessionName.trim()) return;
+
+    if (waQrImage) waQrImage.style.display = 'none';
+    if (waConnectedNotice) waConnectedNotice.style.display = 'none';
+    if (waQrSpinner) waQrSpinner.style.display = 'flex';
+    if (waModalStatusTitle) waModalStatusTitle.textContent = 'Criando instância e gerando QR Code...';
 
     try {
       const res = await fetch('/api/whatsapp/sessions', {
@@ -2141,15 +2223,44 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
       selectedWaSessionId = Number(data.session.id);
+      renderWaSessionsDropdown(data.sessions, data.maxChips, selectedWaSessionId);
       await fetchWhatsAppQr();
+      startWaQrStream();
     } catch (err) {
       alert(`Erro ao criar chip: ${err.message}`);
+    }
+  });
+
+  safeListen(btnWaDeleteSession, 'click', async () => {
+    if (!selectedWaSessionId) return;
+    const selectedLabel = waSessionSelect?.options?.[waSessionSelect.selectedIndex]?.textContent || `Chip #${selectedWaSessionId}`;
+    if (!confirm(`Deseja excluir permanentemente "${selectedLabel}" e apagar sua pasta de sessão?`)) {
+      return;
+    }
+
+    try {
+      closeWaQrStream();
+      const res = await fetch(`/api/whatsapp/sessions/${encodeURIComponent(selectedWaSessionId)}`, {
+        method: 'DELETE'
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Não foi possível excluir este chip.');
+        startWaQrStream();
+        return;
+      }
+      selectedWaSessionId = null;
+      await fetchWhatsAppQr();
+      startWaQrStream();
+    } catch (err) {
+      alert(`Erro ao excluir chip: ${err.message}`);
     }
   });
 
   safeListen(btnWaRefreshQr, 'click', async () => {
     if (waModalStatusTitle) waModalStatusTitle.textContent = 'Reiniciando motor Baileys...';
     if (waQrImage) waQrImage.style.display = 'none';
+    if (waConnectedNotice) waConnectedNotice.style.display = 'none';
     if (waQrSpinner) waQrSpinner.style.display = 'flex';
     try {
       await fetch('/api/whatsapp/reconnect', {
@@ -2157,7 +2268,8 @@ document.addEventListener('DOMContentLoaded', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sessionId: selectedWaSessionId })
       });
-      setTimeout(fetchWhatsAppQr, 1000);
+      startWaQrStream();
+      setTimeout(fetchWhatsAppQr, 900);
     } catch (err) {
       console.error('Erro ao reconectar WhatsApp:', err);
     }

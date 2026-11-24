@@ -20,6 +20,8 @@ import {
   getNativeStatusForUser,
   getNativeQrCodeForUser,
   disconnectNativeWhatsAppForSession,
+  deleteSessionForUser,
+  subscribeSessionEvents,
   isNativeConnectedForUser
 } from '../../integrations/whatsapp-client.js';
 import { getDispatcherForUser, stopDispatcherForUser } from '../3-miner-gmn/whatsapp-dispatcher.js';
@@ -1293,27 +1295,37 @@ app.post('/api/whatsapp/sessions', (req, res) => {
   try {
     const { session_name } = req.body || {};
     const created = db.createWaSession(req.user.id, session_name);
-    return res.status(201).json({ success: true, session: created });
+
+    // Inicializa automaticamente a nova instância Baileys no SessionPool para gerar o QR Code na hora
+    initNativeWhatsAppForSession(req.user.id, created.id).catch(err => {
+      console.warn(`⚠️ [SessionPool User #${req.user.id}] Falha ao autoiniciar chip #${created.id}: ${err.message}`);
+    });
+
+    const status = getNativeStatusForUser(req.user.id, created.id);
+    return res.status(201).json({
+      success: true,
+      session: created,
+      ...status
+    });
   } catch (err) {
     const code = err.message.includes('Limite máximo') ? 403 : 400;
     return res.status(code).json({ success: false, error: err.message });
   }
 });
 
-app.delete('/api/whatsapp/sessions/:id', async (req, res) => {
+async function handleDeleteWaChip(req, res) {
   try {
     const sid = Number(req.params.id);
-    const existing = db.getWaSessionById(sid, req.user.id);
-    if (!existing) {
-      return res.status(404).json({ success: false, error: 'Sessão não encontrada.' });
-    }
-    await disconnectNativeWhatsAppForSession(req.user.id, sid);
-    db.deleteWaSession(sid, req.user.id);
-    return res.status(200).json({ success: true });
+    const result = await deleteSessionForUser(req.user.id, sid);
+    return res.status(200).json(result);
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message });
+    const code = err.message.includes('não encontrada') ? 404 : 500;
+    return res.status(code).json({ success: false, error: err.message });
   }
-});
+}
+
+app.delete('/api/whatsapp/sessions/:id', handleDeleteWaChip);
+app.delete('/api/whatsapp/chips/:id', handleDeleteWaChip);
 
 app.get('/api/whatsapp/status', (req, res) => {
   try {
@@ -1328,11 +1340,72 @@ app.get('/api/whatsapp/status', (req, res) => {
 app.get('/api/whatsapp/qr', (req, res) => {
   try {
     const sessionId = req.query.sessionId ? Number(req.query.sessionId) : null;
-    const status = getNativeStatusForUser(req.user.id, sessionId);
-    const qr = getNativeQrCodeForUser(req.user.id, sessionId);
+    let status = getNativeStatusForUser(req.user.id, sessionId);
+    const targetSession = status.activeSession;
+
+    if (!targetSession) {
+      return res.status(404).json({ success: false, error: 'Nenhum chip encontrado para este usuário.' });
+    }
+
+    // Garante inicialização sob demanda quando o usuário abre ou seleciona um chip desconectado
+    if (targetSession.state === 'DISCONNECTED') {
+      initNativeWhatsAppForSession(req.user.id, targetSession.id).catch(err => {
+        console.warn(`⚠️ [SessionPool User #${req.user.id}] Erro ao iniciar QR sob demanda chip #${targetSession.id}: ${err.message}`);
+      });
+      status = getNativeStatusForUser(req.user.id, targetSession.id);
+    }
+
+    const wantsSse =
+      req.query.stream === '1' ||
+      req.query.stream === 'true' ||
+      String(req.headers.accept || '').includes('text/event-stream');
+
+    if (wantsSse) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders?.();
+
+      const writeSsePayload = (payload) => {
+        if (res.writableEnded) return;
+        const formatted = {
+          success: true,
+          qr: payload.qrCode || null,
+          qrCode: payload.qrCode || null,
+          state: payload.state,
+          connected: Boolean(payload.connected),
+          deleted: Boolean(payload.deleted),
+          user: payload.user || null,
+          activeSession: payload.activeSession || targetSession,
+          sessions: payload.sessions || status.sessions,
+          maxChips: payload.maxChips || status.maxChips
+        };
+        res.write(`event: qr\ndata: ${JSON.stringify(formatted)}\n\n`);
+      };
+
+      writeSsePayload(status);
+
+      const unsubscribe = subscribeSessionEvents(req.user.id, targetSession.id, (payload) => {
+        writeSsePayload(payload);
+      });
+
+      const keepAlive = setInterval(() => {
+        if (!res.writableEnded) {
+          res.write(': ping\n\n');
+        }
+      }, 20000);
+
+      req.on('close', () => {
+        clearInterval(keepAlive);
+        unsubscribe();
+      });
+      return;
+    }
+
     return res.status(200).json({
       success: true,
-      qr,
+      qr: status.qrCode,
       state: status.state,
       connected: status.connected,
       user: status.user,
@@ -1348,7 +1421,7 @@ app.get('/api/whatsapp/qr', (req, res) => {
 app.post('/api/whatsapp/reconnect', async (req, res) => {
   try {
     const sessionId = req.body?.sessionId || req.query.sessionId || null;
-    initNativeWhatsAppForSession(req.user.id, sessionId).catch(err => {
+    initNativeWhatsAppForSession(req.user.id, sessionId, { forceRestart: true }).catch(err => {
       console.warn(`⚠️ [WhatsApp User #${req.user.id}] Aviso ao reinicializar: ${err.message}`);
     });
     return res.status(200).json({

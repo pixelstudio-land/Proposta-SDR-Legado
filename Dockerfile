@@ -23,7 +23,7 @@ RUN npx playwright install --with-deps chromium
 COPY . .
 
 # Garante existência das pastas de persistência
-RUN mkdir -p data/logs data/sessions data/whatsapp-auth data/exports config
+RUN mkdir -p data/logs data/sessions data/whatsapp-auth data/wa_sessions data/exports config
 
 EXPOSE 3000
 

@@ -346,19 +346,29 @@ class AppDatabase {
       .prepare('SELECT id, auth_dir FROM wa_sessions WHERE user_id = ? ORDER BY id ASC LIMIT 1')
       .get(adminId);
 
-    if (!existing) {
-      const relativeAuthDir = `user_${adminId}/slot_1`;
-      const baseWaDir = path.join(path.dirname(settings.database.path), 'whatsapp-auth');
-      const targetAuthDir = path.join(baseWaDir, relativeAuthDir);
+    const dataRoot = path.dirname(settings.database.path);
+    const waSessionsRoot = path.join(dataRoot, 'wa_sessions');
+    const legacyBaseWaDir = path.join(dataRoot, 'whatsapp-auth');
 
-      // Se houver credenciais legadas diretamente na raiz de data/whatsapp-auth/, move com segurança
-      if (fs.existsSync(baseWaDir)) {
-        const legacyCreds = path.join(baseWaDir, 'creds.json');
+    if (!existing) {
+      const insertRes = this.db.prepare(`
+        INSERT INTO wa_sessions (user_id, session_name, status, auth_dir)
+        VALUES (?, 'Chip Principal', 'DISCONNECTED', ?)
+      `).run(adminId, `user_${adminId}/chip_pending`);
+
+      const chipId = Number(insertRes.lastInsertRowid);
+      const canonicalAuthDir = `user_${adminId}/chip_${chipId}`;
+      this.db.prepare('UPDATE wa_sessions SET auth_dir = ? WHERE id = ?').run(canonicalAuthDir, chipId);
+
+      // Se houver credenciais legadas diretamente na raiz de data/whatsapp-auth/, move para /data/wa_sessions/user_{id}/chip_{id}
+      const targetAuthDir = path.join(waSessionsRoot, canonicalAuthDir);
+      if (fs.existsSync(legacyBaseWaDir)) {
+        const legacyCreds = path.join(legacyBaseWaDir, 'creds.json');
         if (fs.existsSync(legacyCreds)) {
           fs.mkdirSync(targetAuthDir, { recursive: true });
-          for (const entry of fs.readdirSync(baseWaDir)) {
+          for (const entry of fs.readdirSync(legacyBaseWaDir)) {
             if (entry.startsWith('user_')) continue;
-            const src = path.join(baseWaDir, entry);
+            const src = path.join(legacyBaseWaDir, entry);
             const dest = path.join(targetAuthDir, entry);
             if (fs.statSync(src).isFile()) {
               fs.renameSync(src, dest);
@@ -366,11 +376,27 @@ class AppDatabase {
           }
         }
       }
+    }
 
-      this.db.prepare(`
-        INSERT INTO wa_sessions (user_id, session_name, status, auth_dir)
-        VALUES (?, 'Chip Principal', 'DISCONNECTED', ?)
-      `).run(adminId, relativeAuthDir);
+    // Normaliza todas as sessões existentes para o padrão canônico user_{user_id}/chip_{chip_id}
+    const allRows = this.db.prepare('SELECT id, user_id, auth_dir FROM wa_sessions').all();
+    for (const row of allRows) {
+      const expectedDir = `user_${Number(row.user_id)}/chip_${Number(row.id)}`;
+      if (row.auth_dir !== expectedDir) {
+        const oldPathInLegacy = path.join(legacyBaseWaDir, row.auth_dir || '');
+        const oldPathInNew = path.join(waSessionsRoot, row.auth_dir || '');
+        const targetPath = path.join(waSessionsRoot, expectedDir);
+        try {
+          if (row.auth_dir && fs.existsSync(oldPathInNew) && !fs.existsSync(targetPath)) {
+            fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+            fs.renameSync(oldPathInNew, targetPath);
+          } else if (row.auth_dir && fs.existsSync(oldPathInLegacy) && !fs.existsSync(targetPath)) {
+            fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+            fs.renameSync(oldPathInLegacy, targetPath);
+          }
+        } catch (_) {}
+        this.db.prepare('UPDATE wa_sessions SET auth_dir = ? WHERE id = ?').run(expectedDir, row.id);
+      }
     }
   }
 
@@ -599,6 +625,13 @@ class AppDatabase {
     return this.db.prepare('SELECT * FROM wa_sessions WHERE user_id = ? ORDER BY id ASC').all(Number(userId));
   }
 
+  getActiveWaSessionsByUser(userId) {
+    if (!userId) return [];
+    return this.db
+      .prepare("SELECT * FROM wa_sessions WHERE user_id = ? AND status != 'RESTRITO' ORDER BY id ASC")
+      .all(Number(userId));
+  }
+
   getAllWaSessions() {
     return this.db.prepare(`
       SELECT w.*, u.active as user_active
@@ -624,32 +657,34 @@ class AppDatabase {
 
     const slotNumber = current.length + 1;
     const finalName = (sessionName && String(sessionName).trim()) || (slotNumber === 1 ? 'Chip Principal' : `Chip ${slotNumber}`);
-    const tempAuthDir = `user_${Number(userId)}/slot_${Date.now()}_${slotNumber}`;
+    const tempAuthDir = `user_${Number(userId)}/chip_pending_${Date.now()}_${slotNumber}`;
 
     const res = this.db.prepare(`
       INSERT INTO wa_sessions (user_id, session_name, status, auth_dir)
       VALUES (?, ?, 'DISCONNECTED', ?)
     `).run(Number(userId), finalName, tempAuthDir);
 
-    const sessionId = Number(res.lastInsertRowid);
-    const canonicalAuthDir = `user_${Number(userId)}/session_${sessionId}`;
-    this.db.prepare('UPDATE wa_sessions SET auth_dir = ? WHERE id = ? AND user_id = ?').run(canonicalAuthDir, sessionId, Number(userId));
+    const chipId = Number(res.lastInsertRowid);
+    const canonicalAuthDir = `user_${Number(userId)}/chip_${chipId}`;
+    this.db.prepare('UPDATE wa_sessions SET auth_dir = ? WHERE id = ? AND user_id = ?').run(canonicalAuthDir, chipId, Number(userId));
 
-    return this.getWaSessionById(sessionId, userId);
+    return this.getWaSessionById(chipId, userId);
   }
 
   updateWaSession(sessionId, userId, { status, phone_number, last_connected_at } = {}) {
     if (!sessionId || !userId) return null;
+    const hasPhoneNumber = phone_number !== undefined ? 1 : 0;
     this.db.prepare(`
       UPDATE wa_sessions SET
         status = COALESCE(?, status),
-        phone_number = ?,
+        phone_number = CASE WHEN ? = 1 THEN ? ELSE phone_number END,
         last_connected_at = COALESCE(?, last_connected_at),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND user_id = ?
     `).run(
       status !== undefined ? status : null,
-      phone_number !== undefined ? phone_number : null,
+      hasPhoneNumber,
+      hasPhoneNumber ? phone_number : null,
       last_connected_at !== undefined ? last_connected_at : null,
       Number(sessionId),
       Number(userId)

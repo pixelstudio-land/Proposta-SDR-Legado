@@ -1,7 +1,9 @@
 import db from '../../database/db.js';
 import {
   sendNativeTextMessageForUser,
-  isNativeConnectedForUser
+  isNativeConnectedForUser,
+  getConnectedSessionsForUser,
+  markSessionRestricted
 } from '../../integrations/whatsapp-client.js';
 
 /**
@@ -82,6 +84,8 @@ class TenantWhatsAppDispatcher {
     this.nextRunAt = null;
     this.currentLead = null;
     this.lastError = null;
+    this.roundRobinCursor = 0;
+    this.lastChipUsed = null;
 
     this.defaultTemplate =
 `{saudacao}, tudo bem? Vi a {empresa} aqui no Google ({nota} ★ com {avaliacoes} avaliações) em {cidade} e achei o posicionamento de vocês excelente.
@@ -255,8 +259,10 @@ Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria p
       return;
     }
 
-    if (!isNativeConnectedForUser(this.userId)) {
-      this.lastError = 'WhatsApp local não conectado. Conecte pelo QR Code para iniciar os envios.';
+    // Busca todos os chips ATIVOS e não restritos pertencentes ao tenant
+    const activeChips = getConnectedSessionsForUser(this.userId);
+    if (!activeChips || activeChips.length === 0) {
+      this.lastError = 'Nenhum chip WhatsApp conectado (ou todos estão RESTRITOS). Conecte um chip pelo QR Code.';
       this.scheduleNextTick(15000);
       return;
     }
@@ -289,23 +295,68 @@ Vocês teriam 2 minutinhos para ver uma demonstração rápida de como ficaria p
       this.pitchTemplate;
     const messageText = formatTemplateMessage(activeTemplate, lead);
 
-    try {
-      const sendResult = await sendNativeTextMessageForUser(this.userId, lead.phone, messageText);
+    // Rotação Round-Robin: Lead 1 -> Chip A, Lead 2 -> Chip B...
+    const startIdx = this.roundRobinCursor % activeChips.length;
+    this.roundRobinCursor = (startIdx + 1) % activeChips.length;
 
-      if (sendResult.success) {
-        this.lastSentAt = new Date().toISOString();
-        this.lastError = null;
+    let delivered = false;
+    for (let attempt = 0; attempt < activeChips.length; attempt++) {
+      const chip = activeChips[(startIdx + attempt) % activeChips.length];
 
-        db.logSentMessage(lead.id, 'whatsapp_dispatcher', messageText, this.userId);
-        db.addConversationMessage(lead.id, 'assistant', messageText, this.userId);
-        db.updateLead(lead.id, { status: 'in_qualification' }, this.userId);
+      try {
+        const sendResult = await sendNativeTextMessageForUser(
+          this.userId,
+          lead.phone,
+          messageText,
+          chip.id
+        );
 
-        console.log(`✅ [WhatsApp Dispatcher User #${this.userId}] Enviado para ${company}!`);
-      } else {
-        this.lastError = sendResult.error || 'Falha ao entregar mensagem';
+        if (sendResult.success) {
+          this.lastSentAt = new Date().toISOString();
+          this.lastError = null;
+          this.lastChipUsed = { id: chip.id, name: chip.session_name };
+
+          db.logSentMessage(lead.id, 'whatsapp_dispatcher', messageText, this.userId);
+          db.addConversationMessage(lead.id, 'assistant', messageText, this.userId);
+          db.updateLead(lead.id, { status: 'in_qualification' }, this.userId);
+
+          console.log(`✅ [WhatsApp Dispatcher User #${this.userId}] Enviado para ${company} via Chip #${chip.id} (${chip.session_name})`);
+          delivered = true;
+          break;
+        }
+
+        const isMetaRestriction =
+          sendResult.isRestriction ||
+          [401, 403, 428].includes(Number(sendResult.statusCode));
+
+        if (isMetaRestriction) {
+          markSessionRestricted(
+            this.userId,
+            chip.id,
+            sendResult.error || `Restrição HTTP ${sendResult.statusCode || 'Meta'}`
+          );
+          this.lastError = `Chip "${chip.session_name}" recebeu restrição (${sendResult.statusCode || 'Meta'}) e foi isolado; tentando próximo chip.`;
+          continue;
+        }
+
+        this.lastError = sendResult.error || `Falha no envio pelo chip ${chip.session_name}`;
+      } catch (err) {
+        const errCode = Number(err?.output?.statusCode || err?.statusCode || 0);
+        const isMetaRestriction =
+          [401, 403, 428].includes(errCode) ||
+          /\b(401|403|428)\b/.test(String(err.message || ''));
+
+        if (isMetaRestriction) {
+          markSessionRestricted(this.userId, chip.id, err.message);
+          this.lastError = `Chip "${chip.session_name}" marcado como RESTRITO; alternando automaticamente para próximo chip.`;
+          continue;
+        }
+        this.lastError = err.message;
       }
-    } catch (err) {
-      this.lastError = err.message;
+    }
+
+    if (!delivered && !this.lastError) {
+      this.lastError = 'Nenhum chip ativo conseguiu concluir o envio neste ciclo.';
     }
 
     if (this.isRunning) {

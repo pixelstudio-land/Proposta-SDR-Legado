@@ -974,10 +974,11 @@
 
       <div class="modal-content" style="padding: 24px; text-align: center;">
         <!-- Seletor de Chips Multi-Tenant -->
-        <div id="waSessionControls" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; background: var(--bg-card-subtle); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
-          <select id="waSessionSelect" class="form-input" style="font-size: 12px; padding: 6px 10px; flex: 1;"></select>
+        <div id="waSessionControls" style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 14px; background: var(--bg-card-subtle); padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle); flex-wrap: wrap;">
+          <select id="waSessionSelect" class="form-input" style="font-size: 12px; padding: 6px 10px; flex: 1; min-width: 150px;"></select>
           <span id="waChipsQuotaBadge" class="records-pill font-mono" style="white-space: nowrap;">1/1 chips</span>
           <button id="btnWaAddSession" type="button" class="btn btn-secondary btn-xs" title="Adicionar novo chip WhatsApp dentro do seu limite">+ Novo Chip</button>
+          <button id="btnWaDeleteSession" type="button" class="btn btn-secondary btn-xs" style="color: var(--red); border-color: var(--red-border);" title="Excluir chip selecionado e remover pasta de sessão">Excluir</button>
         </div>
 
         <!-- Status Box -->
@@ -1137,6 +1138,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=6"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

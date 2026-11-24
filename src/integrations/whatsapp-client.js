@@ -3,45 +3,117 @@ import makeWASocket, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys';
+import EventEmitter from 'events';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import path from 'path';
 import fs from 'fs';
-import { fileURLToPath } from 'url';
 import { settings } from '../../config/settings.js';
 import db from '../database/db.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const rootDir = path.resolve(__dirname, '..', '..');
-const baseAuthDir = path.join(rootDir, 'data', 'whatsapp-auth');
+const dataRoot = path.dirname(settings.database.path);
+const baseWaSessionsDir = path.join(dataRoot, 'wa_sessions');
 
-// Mapa em memória de sessões Baileys isoladas por wa_sessions.id
-const sessionRuntimes = new Map();
+if (!fs.existsSync(baseWaSessionsDir)) {
+  fs.mkdirSync(baseWaSessionsDir, { recursive: true });
+}
 
-function getSessionFullAuthDir(sessionRow) {
-  return path.join(baseAuthDir, sessionRow.auth_dir);
+/**
+ * Gerenciador de Sessões Baileys Multi-Tenant (SessionPool)
+ * Chave estrita no Map: `${user_id}:${chip_id}`
+ * Diretório estrito no disco: `/data/wa_sessions/user_${user_id}/chip_${chip_id}`
+ */
+export const sessions = new Map();
+export const waEventBus = new EventEmitter();
+waEventBus.setMaxListeners(500);
+
+export function getSessionKey(userId, chipId) {
+  return `${Number(userId)}:${Number(chipId)}`;
+}
+
+export function getSessionEventChannel(userId, chipId) {
+  return `session:${Number(userId)}:${Number(chipId)}`;
+}
+
+export function getSessionFullAuthDir(userId, chipId) {
+  return path.join(baseWaSessionsDir, `user_${Number(userId)}`, `chip_${Number(chipId)}`);
 }
 
 function getOrCreateRuntime(sessionRow) {
+  const uid = Number(sessionRow.user_id);
   const sid = Number(sessionRow.id);
-  let rt = sessionRuntimes.get(sid);
+  const key = getSessionKey(uid, sid);
+
+  let rt = sessions.get(key);
   if (!rt) {
+    const initialState = sessionRow.status === 'RESTRITO'
+      ? 'RESTRITO'
+      : 'DISCONNECTED';
+
     rt = {
+      key,
       sessionId: sid,
-      userId: Number(sessionRow.user_id),
+      chipId: sid,
+      userId: uid,
+      sessionName: sessionRow.session_name,
       sock: null,
-      state: sessionRow.status === 'CONNECTED' ? 'DISCONNECTED' : (sessionRow.status || 'DISCONNECTED'),
+      state: initialState,
       qrCodeDataUrl: null,
       qrRaw: null,
       connectedUserNumber: sessionRow.phone_number || null,
+      wasConnected: false,
       reconnectAttempts: 0,
+      reconnectTimer: null,
       isInitializing: false
     };
-    sessionRuntimes.set(sid, rt);
+    sessions.set(key, rt);
+  } else {
+    rt.sessionName = sessionRow.session_name;
   }
   return rt;
 }
+
+function emitSessionUpdate(userId, chipId, extra = {}) {
+  const uid = Number(userId);
+  const sid = Number(chipId);
+  const payload = {
+    ...getNativeStatusForUser(uid, sid),
+    userId: uid,
+    chipId: sid,
+    sessionKey: getSessionKey(uid, sid),
+    timestamp: Date.now(),
+    ...extra
+  };
+  waEventBus.emit(getSessionEventChannel(uid, sid), payload);
+  return payload;
+}
+
+export function subscribeSessionEvents(userId, chipId, listener) {
+  const channel = getSessionEventChannel(userId, chipId);
+  waEventBus.on(channel, listener);
+  return () => {
+    waEventBus.off(channel, listener);
+  };
+}
+
+export const SessionPool = {
+  map: sessions,
+  key: getSessionKey,
+  get(userId, chipId) {
+    return sessions.get(getSessionKey(userId, chipId)) || null;
+  },
+  getByKey(sessionKey) {
+    return sessions.get(sessionKey) || null;
+  },
+  set(userId, chipId, runtime) {
+    sessions.set(getSessionKey(userId, chipId), runtime);
+  },
+  delete(userId, chipId) {
+    return sessions.delete(getSessionKey(userId, chipId));
+  },
+  getAuthDir: getSessionFullAuthDir,
+  subscribe: subscribeSessionEvents
+};
 
 /**
  * Resolve o chip (wa_sessions) alvo pertencente exclusivamente ao userId informado
@@ -58,57 +130,123 @@ export function resolveSessionForUser(userId, sessionId = null) {
     return specific;
   }
 
-  let sessions = db.getWaSessionsByUser(uid);
-  if (sessions.length === 0) {
+  let userSessions = db.getWaSessionsByUser(uid);
+  if (userSessions.length === 0) {
     const created = db.createWaSession(uid, 'Chip Principal');
-    sessions = [created];
+    userSessions = [created];
   }
 
-  // Prefere sessão conectada em memória
-  for (const s of sessions) {
-    const rt = sessionRuntimes.get(Number(s.id));
+  // Prefere sessão conectada em memória e não restrita
+  for (const s of userSessions) {
+    if (s.status === 'RESTRITO') continue;
+    const rt = sessions.get(getSessionKey(uid, s.id));
     if (rt && rt.state === 'CONNECTED' && rt.sock) {
       return s;
     }
   }
-  return sessions[0];
+  return userSessions.find(s => s.status !== 'RESTRITO') || userSessions[0];
+}
+
+function clearRuntimeReconnectTimer(rt) {
+  if (rt?.reconnectTimer) {
+    clearTimeout(rt.reconnectTimer);
+    rt.reconnectTimer = null;
+  }
+}
+
+function closeSocketSafely(sock) {
+  if (!sock) return;
+  try {
+    sock.ev?.removeAllListeners?.('connection.update');
+    sock.ev?.removeAllListeners?.('creds.update');
+    sock.end(undefined);
+  } catch (_) {}
 }
 
 /**
- * Inicializa em background apenas sessões que já possuem credenciais salvas e dono ativo
+ * Inicializa em background apenas sessões com credenciais salvas, dono ativo e não restritas
  */
 export async function initPersistedWhatsAppSessions() {
   try {
     const allSessions = db.getAllWaSessions();
     for (const s of allSessions) {
-      if (!s.user_active) continue;
-      const fullDir = getSessionFullAuthDir(s);
+      if (!s.user_active || s.status === 'RESTRITO') continue;
+      const fullDir = getSessionFullAuthDir(s.user_id, s.id);
       if (fs.existsSync(path.join(fullDir, 'creds.json'))) {
         initNativeWhatsAppForSession(s.user_id, s.id).catch(err => {
-          console.warn(`⚠️ [WhatsApp Baileys] Reconexão automática sessão #${s.id} (user #${s.user_id}): ${err.message}`);
+          console.warn(`⚠️ [SessionPool] Reconexão automática ${getSessionKey(s.user_id, s.id)}: ${err.message}`);
         });
       }
     }
   } catch (err) {
-    console.warn(`⚠️ [WhatsApp Baileys] Erro ao inicializar sessões persistidas: ${err.message}`);
+    console.warn(`⚠️ [SessionPool] Erro ao inicializar sessões persistidas: ${err.message}`);
   }
 }
 
 /**
- * Inicializa a conexão Baileys isolada para uma sessão específica do usuário
+ * Marca um chip como RESTRITO no SQLite e encerra seu socket na SessionPool
  */
-export async function initNativeWhatsAppForSession(userId, sessionId = null) {
+export function markSessionRestricted(userId, chipId, reason = 'Restrição detectada pela Meta/WhatsApp') {
+  const uid = Number(userId);
+  const sid = Number(chipId);
+  const key = getSessionKey(uid, sid);
+  const rt = sessions.get(key);
+
+  if (rt) {
+    clearRuntimeReconnectTimer(rt);
+    if (rt.sock) {
+      const activeSock = rt.sock;
+      rt.sock = null;
+      closeSocketSafely(activeSock);
+    }
+    rt.state = 'RESTRITO';
+    rt.qrCodeDataUrl = null;
+    rt.qrRaw = null;
+    rt.isInitializing = false;
+  }
+
+  db.updateWaSession(sid, uid, { status: 'RESTRITO' });
+  console.warn(`⛔ [SessionPool] Chip ${key} marcado como RESTRITO: ${reason}`);
+  emitSessionUpdate(uid, sid, { restrictedReason: reason });
+}
+
+/**
+ * Inicializa uma instância Baileys isolada em /data/wa_sessions/user_{user_id}/chip_{chip_id}
+ */
+export async function initNativeWhatsAppForSession(userId, sessionId = null, { forceRestart = false } = {}) {
   const sessionRow = resolveSessionForUser(userId, sessionId);
   const uid = Number(sessionRow.user_id);
   const sid = Number(sessionRow.id);
   const rt = getOrCreateRuntime(sessionRow);
+
+  clearRuntimeReconnectTimer(rt);
+
+  if (sessionRow.status === 'RESTRITO' && !forceRestart) {
+    rt.state = 'RESTRITO';
+    emitSessionUpdate(uid, sid);
+    return rt.sock;
+  }
+
+  if (forceRestart && rt.sock) {
+    const oldSock = rt.sock;
+    rt.sock = null;
+    closeSocketSafely(oldSock);
+    rt.isInitializing = false;
+    rt.qrCodeDataUrl = null;
+    rt.qrRaw = null;
+    rt.reconnectAttempts = 0;
+  }
+
+  if (!forceRestart && rt.sock && (rt.state === 'CONNECTED' || rt.state === 'QR_READY' || rt.state === 'CONNECTING')) {
+    return rt.sock;
+  }
 
   if (rt.isInitializing) {
     return rt.sock;
   }
   rt.isInitializing = true;
 
-  const fullAuthDir = getSessionFullAuthDir(sessionRow);
+  const fullAuthDir = getSessionFullAuthDir(uid, sid);
 
   try {
     if (!fs.existsSync(fullAuthDir)) {
@@ -123,14 +261,17 @@ export async function initNativeWhatsAppForSession(userId, sessionId = null) {
     } catch (_) {}
 
     rt.state = 'CONNECTING';
+    rt.qrCodeDataUrl = null;
+    rt.qrRaw = null;
     db.updateWaSession(sid, uid, { status: 'CONNECTING' });
+    emitSessionUpdate(uid, sid);
 
     const sock = makeWASocket({
       version,
       logger: pino({ level: 'silent' }),
       printQRInTerminal: false,
       auth: state,
-      browser: [`Legado SDR (${sessionRow.session_name})`, 'Chrome', '124.0.0'],
+      browser: [`Legado SDR #${sid}`, 'Chrome', '124.0.0'],
       generateHighQualityLinkPreview: true
     });
 
@@ -138,7 +279,6 @@ export async function initNativeWhatsAppForSession(userId, sessionId = null) {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
-      // Garante que este evento ainda pertence ao socket ativo desta sessão
       if (rt.sock !== sock) return;
 
       const { connection, lastDisconnect, qr } = update;
@@ -152,10 +292,13 @@ export async function initNativeWhatsAppForSession(userId, sessionId = null) {
           rt.qrCodeDataUrl = null;
         }
         db.updateWaSession(sid, uid, { status: 'QR_READY' });
+        console.log(`📱 [SessionPool] QR Code pronto para chip ${rt.key} (${rt.sessionName})`);
+        emitSessionUpdate(uid, sid);
       }
 
       if (connection === 'open') {
         rt.state = 'CONNECTED';
+        rt.wasConnected = true;
         rt.qrCodeDataUrl = null;
         rt.qrRaw = null;
         rt.connectedUserNumber = sock.user?.id ? sock.user.id.split(':')[0].replace(/\D/g, '') : 'Conectado';
@@ -167,50 +310,59 @@ export async function initNativeWhatsAppForSession(userId, sessionId = null) {
           last_connected_at: new Date().toISOString()
         });
 
-        console.log(`✅ [WhatsApp Nativo] Sessão #${sid} (user #${uid}) conectada: +${rt.connectedUserNumber}`);
+        console.log(`✅ [SessionPool] Chip ${rt.key} (${rt.sessionName}) conectado: +${rt.connectedUserNumber}`);
+        emitSessionUpdate(uid, sid);
 
-        // Revalida leads pendentes EXCLUSIVAMENTE deste tenant
         setTimeout(() => {
           revalidateOfflineLeadsForUser(uid, sid).catch(err => {
-            console.warn(`⚠️ [WhatsApp Nativo] Aviso revalidação user #${uid}: ${err.message}`);
+            console.warn(`⚠️ [SessionPool] Aviso revalidação ${rt.key}: ${err.message}`);
           });
         }, 3500);
       }
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        const wasConnectedBefore = rt.wasConnected;
 
-        rt.state = 'DISCONNECTED';
+        rt.sock = null;
         rt.qrCodeDataUrl = null;
         rt.qrRaw = null;
+        rt.isInitializing = false;
+
+        // Se o chip já estava em uso ou recebeu 403/401/428 crítico de restrição/sessão revogada
+        if (statusCode === 403 || (wasConnectedBefore && (statusCode === 401 || statusCode === 428))) {
+          markSessionRestricted(uid, sid, `Desconexão crítica código ${statusCode}`);
+          return;
+        }
+
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        rt.state = 'DISCONNECTED';
         rt.connectedUserNumber = null;
-        rt.sock = null;
+        rt.wasConnected = false;
         db.updateWaSession(sid, uid, { status: 'DISCONNECTED', phone_number: null });
+        emitSessionUpdate(uid, sid);
 
         const currentUser = db.getUserById(uid);
-        if (!currentUser || !currentUser.active) {
-          rt.isInitializing = false;
+        const currentChip = db.getWaSessionById(sid, uid);
+        if (!currentUser || !currentUser.active || !currentChip || currentChip.status === 'RESTRITO') {
           return;
         }
 
         if (shouldReconnect) {
           if (rt.reconnectAttempts < 8) {
             rt.reconnectAttempts++;
-            setTimeout(() => {
-              rt.isInitializing = false;
+            clearRuntimeReconnectTimer(rt);
+            rt.reconnectTimer = setTimeout(() => {
+              rt.reconnectTimer = null;
               if (db.getWaSessionById(sid, uid)) {
                 initNativeWhatsAppForSession(uid, sid).catch(() => {});
               }
-            }, 4000);
-          } else {
-            rt.isInitializing = false;
+            }, statusCode === DisconnectReason.restartRequired ? 1000 : 3500);
           }
         } else {
           try {
             fs.rmSync(fullAuthDir, { recursive: true, force: true });
           } catch (_) {}
-          rt.isInitializing = false;
         }
       }
     });
@@ -221,6 +373,7 @@ export async function initNativeWhatsAppForSession(userId, sessionId = null) {
     rt.isInitializing = false;
     rt.state = 'DISCONNECTED';
     db.updateWaSession(sid, uid, { status: 'DISCONNECTED' });
+    emitSessionUpdate(uid, sid, { error: error.message });
     throw error;
   }
 }
@@ -233,15 +386,17 @@ export async function disconnectNativeWhatsAppForSession(userId, sessionId = nul
   const uid = Number(sessionRow.user_id);
   const sid = Number(sessionRow.id);
   const rt = getOrCreateRuntime(sessionRow);
-  const fullAuthDir = getSessionFullAuthDir(sessionRow);
+  const fullAuthDir = getSessionFullAuthDir(uid, sid);
 
   try {
+    clearRuntimeReconnectTimer(rt);
     if (rt.sock) {
       const activeSock = rt.sock;
       rt.sock = null;
-      activeSock.end(undefined);
+      closeSocketSafely(activeSock);
     }
     rt.state = 'DISCONNECTED';
+    rt.wasConnected = false;
     rt.qrCodeDataUrl = null;
     rt.qrRaw = null;
     rt.connectedUserNumber = null;
@@ -253,53 +408,113 @@ export async function disconnectNativeWhatsAppForSession(userId, sessionId = nul
     if (fs.existsSync(fullAuthDir)) {
       fs.rmSync(fullAuthDir, { recursive: true, force: true });
     }
+    emitSessionUpdate(uid, sid);
     return { success: true, message: 'WhatsApp desconectado e credenciais removidas.' };
   } catch (err) {
     return { success: false, error: err.message };
   }
 }
 
+/**
+ * Exclui explicitamente um chip: encerra socket Baileys, faz rm -rf na pasta isolada e remove do SQLite
+ */
+export async function deleteSessionForUser(userId, sessionId) {
+  const uid = Number(userId);
+  const sid = Number(sessionId);
+  const existing = db.getWaSessionById(sid, uid);
+  if (!existing) {
+    throw new Error('Sessão de WhatsApp não encontrada para este usuário.');
+  }
+
+  const key = getSessionKey(uid, sid);
+  const rt = sessions.get(key);
+  if (rt) {
+    clearRuntimeReconnectTimer(rt);
+    if (rt.sock) {
+      const activeSock = rt.sock;
+      rt.sock = null;
+      closeSocketSafely(activeSock);
+    }
+    sessions.delete(key);
+  }
+
+  const fullAuthDir = getSessionFullAuthDir(uid, sid);
+  if (fs.existsSync(fullAuthDir)) {
+    fs.rmSync(fullAuthDir, { recursive: true, force: true });
+  }
+
+  db.deleteWaSession(sid, uid);
+  waEventBus.emit(getSessionEventChannel(uid, sid), {
+    deleted: true,
+    userId: uid,
+    chipId: sid,
+    sessionKey: key,
+    state: 'DELETED',
+    connected: false,
+    qr: null
+  });
+
+  return { success: true, deletedChipId: sid, removedDir: fullAuthDir };
+}
+
 export function isNativeConnectedForUser(userId, sessionId = null) {
   try {
-    const sessionRow = resolveSessionForUser(userId, sessionId);
-    const rt = sessionRuntimes.get(Number(sessionRow.id));
-    return Boolean(rt && rt.state === 'CONNECTED' && rt.sock);
+    if (sessionId) {
+      const sessionRow = resolveSessionForUser(userId, sessionId);
+      const rt = sessions.get(getSessionKey(userId, sessionRow.id));
+      return Boolean(rt && rt.state === 'CONNECTED' && rt.sock && sessionRow.status !== 'RESTRITO');
+    }
+    return getConnectedSessionsForUser(userId).length > 0;
   } catch {
     return false;
   }
 }
 
+export function getConnectedSessionsForUser(userId) {
+  const uid = Number(userId);
+  const activeRows = db.getActiveWaSessionsByUser(uid);
+  return activeRows.filter(row => {
+    const rt = sessions.get(getSessionKey(uid, row.id));
+    return Boolean(rt && rt.state === 'CONNECTED' && rt.sock);
+  });
+}
+
 export function getNativeStatusForUser(userId, sessionId = null) {
   const uid = Number(userId);
   const user = db.getUserById(uid);
-  const sessions = db.getWaSessionsByUser(uid).map(s => {
-    const rt = sessionRuntimes.get(Number(s.id));
+  const mappedSessions = db.getWaSessionsByUser(uid).map(s => {
+    const rt = sessions.get(getSessionKey(uid, s.id));
+    const effectiveState = s.status === 'RESTRITO'
+      ? 'RESTRITO'
+      : (rt?.state || 'DISCONNECTED');
     return {
       id: s.id,
       session_name: s.session_name,
-      phone_number: rt?.connectedUserNumber || s.phone_number,
-      state: rt?.state || 'DISCONNECTED',
-      connected: Boolean(rt && rt.state === 'CONNECTED' && rt.sock)
+      auth_dir: s.auth_dir,
+      phone_number: rt?.connectedUserNumber || s.phone_number || null,
+      state: effectiveState,
+      connected: Boolean(rt && effectiveState === 'CONNECTED' && rt.sock)
     };
   });
 
   let target = null;
   if (sessionId) {
-    target = sessions.find(s => Number(s.id) === Number(sessionId)) || null;
+    target = mappedSessions.find(s => Number(s.id) === Number(sessionId)) || null;
   }
   if (!target) {
-    target = sessions.find(s => s.connected) || sessions[0] || null;
+    target = mappedSessions.find(s => s.connected) || mappedSessions[0] || null;
   }
 
-  const targetRt = target ? sessionRuntimes.get(Number(target.id)) : null;
+  const targetRt = target ? sessions.get(getSessionKey(uid, target.id)) : null;
+  const targetState = target?.state || targetRt?.state || 'DISCONNECTED';
 
   return {
-    state: targetRt?.state || 'DISCONNECTED',
-    connected: Boolean(targetRt && targetRt.state === 'CONNECTED' && targetRt.sock),
-    qrCode: targetRt?.qrCodeDataUrl || null,
-    user: targetRt?.connectedUserNumber || target?.phone_number || null,
+    state: targetState,
+    connected: Boolean(target?.connected),
+    qrCode: targetState === 'QR_READY' ? (targetRt?.qrCodeDataUrl || null) : null,
+    user: target?.phone_number || targetRt?.connectedUserNumber || null,
     activeSession: target,
-    sessions,
+    sessions: mappedSessions,
     maxChips: user ? Number(user.max_chips) : 1
   };
 }
@@ -333,7 +548,7 @@ export async function checkNumberOnWhatsAppForUser(userId, phone, sessionId = nu
     return { exists: false, connected: false, isOffline: true, error: err.message };
   }
 
-  const rt = sessionRuntimes.get(Number(sessionRow.id));
+  const rt = sessions.get(getSessionKey(userId, sessionRow.id));
   if (!rt || !rt.sock || rt.state !== 'CONNECTED') {
     return {
       exists: false,
@@ -461,13 +676,38 @@ export async function revalidateOfflineLeadsForUser(userId, sessionId = null) {
   }
 }
 
+function extractErrorStatusCode(error) {
+  return Number(
+    error?.output?.statusCode ||
+    error?.data?.statusCode ||
+    error?.statusCode ||
+    error?.status ||
+    0
+  ) || null;
+}
+
 export async function sendNativeTextMessageForUser(userId, phone, text, sessionId = null) {
   const sessionRow = resolveSessionForUser(userId, sessionId);
-  const rt = sessionRuntimes.get(Number(sessionRow.id));
+  const uid = Number(sessionRow.user_id);
+  const sid = Number(sessionRow.id);
+  const rt = sessions.get(getSessionKey(uid, sid));
+
+  if (sessionRow.status === 'RESTRITO') {
+    return {
+      success: false,
+      statusCode: 403,
+      isRestriction: true,
+      sessionId: sid,
+      sessionName: sessionRow.session_name,
+      error: `Chip "${sessionRow.session_name}" está marcado como RESTRITO.`
+    };
+  }
 
   if (!rt || !rt.sock || rt.state !== 'CONNECTED') {
     return {
       success: false,
+      sessionId: sid,
+      sessionName: sessionRow.session_name,
       error: 'WhatsApp não está conectado. Escaneie o QR Code no painel.'
     };
   }
@@ -481,7 +721,7 @@ export async function sendNativeTextMessageForUser(userId, phone, text, sessionI
       if (!clean || clean.length < 10) {
         throw new Error(`Número de WhatsApp inválido: "${phone}"`);
       }
-      const check = await checkNumberOnWhatsAppForUser(userId, clean, sessionRow.id).catch(() => null);
+      const check = await checkNumberOnWhatsAppForUser(uid, clean, sid).catch(() => null);
       jid = check?.exists && check.jid ? check.jid : `${clean}@s.whatsapp.net`;
     }
 
@@ -491,11 +731,25 @@ export async function sendNativeTextMessageForUser(userId, phone, text, sessionI
       data: result,
       recipient: phone,
       jid,
+      sessionId: sid,
+      sessionName: sessionRow.session_name,
       messageId: result?.key?.id
     };
   } catch (error) {
+    const statusCode = extractErrorStatusCode(error);
+    const msg = String(error?.message || '');
+    const isRestriction =
+      statusCode === 401 ||
+      statusCode === 403 ||
+      statusCode === 428 ||
+      /\b(401|403|428)\b/.test(msg);
+
     return {
       success: false,
+      statusCode,
+      isRestriction,
+      sessionId: sid,
+      sessionName: sessionRow.session_name,
       error: `Falha ao enviar mensagem WhatsApp: ${error.message}`
     };
   }
@@ -541,12 +795,20 @@ class WhatsAppBaileysClient {
     return initPersistedWhatsAppSessions();
   }
 
-  initForUser(userId, sessionId = null) {
-    return initNativeWhatsAppForSession(userId, sessionId);
+  initForUser(userId, sessionId = null, opts = {}) {
+    return initNativeWhatsAppForSession(userId, sessionId, opts);
   }
 
   disconnectForUser(userId, sessionId = null) {
     return disconnectNativeWhatsAppForSession(userId, sessionId);
+  }
+
+  deleteSessionForUser(userId, sessionId) {
+    return deleteSessionForUser(userId, sessionId);
+  }
+
+  markSessionRestricted(userId, sessionId, reason) {
+    return markSessionRestricted(userId, sessionId, reason);
   }
 
   getStatusForUser(userId, sessionId = null) {
@@ -559,6 +821,10 @@ class WhatsAppBaileysClient {
 
   isConnectedForUser(userId, sessionId = null) {
     return isNativeConnectedForUser(userId, sessionId);
+  }
+
+  getConnectedSessionsForUser(userId) {
+    return getConnectedSessionsForUser(userId);
   }
 
   sendTextMessageForUser(userId, recipientPhone, messageText, sessionId = null) {
