@@ -2,12 +2,13 @@ version: "3.8"
 
 services:
   app:
-    image: sdr-legado:v4
+    image: sdr-legado:v5
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - PANEL_PASSWORD=legado123
-      - ADMIN_PASSWORD=legado123
+      - JWT_SECRET=${JWT_SECRET}
+      - INITIAL_ADMIN_EMAIL=${INITIAL_ADMIN_EMAIL:-legadomidia@gmail.com}
+      - INITIAL_ADMIN_PASSWORD=${INITIAL_ADMIN_PASSWORD}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ALERT_WHATSAPP=${ALERT_WHATSAPP:-5511913393797}
       - SDR_NOTIFICATION_PHONE=${SDR_NOTIFICATION_PHONE:-5511913393797}

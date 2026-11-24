@@ -9,9 +9,13 @@ class LeadExporter {
    * @param {Array<Object>} leadsList - Lista de leads extraídos
    * @param {string} queryName - Termo de busca usado na mineração para compor o nome do arquivo
    */
-  exportToExcel(leadsList = [], queryName = 'geral') {
-    if (!fs.existsSync(settings.paths.exportsDir)) {
-      fs.mkdirSync(settings.paths.exportsDir, { recursive: true });
+  exportToExcel(leadsList = [], queryName = 'geral', userId = null) {
+    const targetDir = userId
+      ? path.join(settings.paths.exportsDir, `user_${Number(userId)}`)
+      : settings.paths.exportsDir;
+
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
     }
 
     const sanitizedQuery = String(queryName)
@@ -24,7 +28,7 @@ class LeadExporter {
 
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const fileName = `mineracao_gmn_${sanitizedQuery}_${timestamp}.xlsx`;
-    const filePath = path.join(settings.paths.exportsDir, fileName);
+    const filePath = path.join(targetDir, fileName);
 
     // Mapeamento dos dados para colunas executivas
     const rows = leadsList.map((lead, index) => ({

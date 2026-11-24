@@ -7,11 +7,11 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 
 /**
- * Orquestrador do Módulo Outbound Blindado
- * Executa o pipeline completo: Raspar Alvos -> Filtrar com IA -> Disparar Cold DMs
+ * Orquestrador do Módulo Outbound Blindado (Isolado por Tenant)
  */
 export async function runOutboundPipeline(options = {}) {
   const isCli = !options.fromApi;
+  const userId = Number(options.userId) || db.getAdminUserId();
   const args = process.argv.slice(2);
   const targetArg = options.target !== undefined ? options.target : args.find(a => a.startsWith('--target='))?.split('=')[1];
   const limitArg = options.limit !== undefined ? parseInt(options.limit, 10) : parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1] || '10', 10);
@@ -19,36 +19,23 @@ export async function runOutboundPipeline(options = {}) {
   const skipSend = options.skipSend !== undefined ? options.skipSend : args.includes('--skip-send');
 
   console.log('================================================================');
-  console.log('🤖 INICIANDO PIPELINE: MÓDULO 2 - OUTBOUND INSTAGRAM BLINDADO');
+  console.log(`🤖 INICIANDO PIPELINE: MÓDULO 2 - OUTBOUND INSTAGRAM (USER #${userId})`);
   console.log('================================================================');
 
   try {
-    // ETAPA 1: Raspagem de Alvos
     if (!skipScrape && targetArg) {
       console.log(`\n📌 [ETAPA 1/3] Raspando seguidores de @${targetArg} (Limite: ${limitArg})...`);
-      await targetScraper.scrapeFollowers(targetArg, limitArg);
-    } else if (!skipScrape && !targetArg) {
-      console.log('\nℹ️ [ETAPA 1/3] Nenhum target informado. Pulando raspagem e processando leads já salvos no banco.');
+      await targetScraper.scrapeFollowers(targetArg, limitArg, userId);
     }
 
-    // ETAPA 2: Filtragem e Auditoria Cognitiva via IA
     console.log('\n📌 [ETAPA 2/3] Executando auditoria cognitiva de bios com GPT-4o-mini...');
-    const filterResults = await profileFilter.filterPendingLeads();
-    console.log(`📊 Auditoria concluída: ${filterResults.approved.length} perfis aprovados para abordagem.`);
+    const filterResults = await profileFilter.filterPendingLeads(userId);
 
-    // ETAPA 3: Envio de Cold DMs Humanizadas
     let sendResults = { sent: 0, skipped: 0 };
     if (!skipSend) {
       console.log('\n📌 [ETAPA 3/3] Iniciando disparo humanizado de Cold DMs em rodízio...');
-      sendResults = await outboundMessenger.sendColdDms(5);
-      console.log(`🚀 Disparos finalizados: ${sendResults.sent} enviados | ${sendResults.skipped} pulados.`);
-    } else {
-      console.log('\nℹ️ [ETAPA 3/3] Disparo ignorado (--skip-send ativo).');
+      sendResults = await outboundMessenger.sendColdDms(5, userId);
     }
-
-    console.log('\n================================================================');
-    console.log('✅ PIPELINE OUTBOUND CONCLUÍDO COM SUCESSO');
-    console.log('================================================================');
 
     return {
       success: true,
@@ -57,7 +44,6 @@ export async function runOutboundPipeline(options = {}) {
       sent: sendResults.sent,
       skipped: sendResults.skipped
     };
-
   } catch (error) {
     console.error(`\n❌ Falha na execução do pipeline Outbound: ${error.message}`);
     throw error;
@@ -68,7 +54,6 @@ export async function runOutboundPipeline(options = {}) {
   }
 }
 
-// Execução direta via CLI (npm run outbound)
 const isDirectRun = process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1]);
 if (isDirectRun) {
   runOutboundPipeline({ fromApi: false });

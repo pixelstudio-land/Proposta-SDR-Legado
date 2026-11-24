@@ -9,12 +9,13 @@ export function getSdrInboundSystemPrompt(leadContext = {}) {
     leadContext.source === 'whatsapp' ||
     leadContext.source === 'outbound_instagram';
 
-  const rawMinRevenue = leadContext.minRevenue || db.getSetting('icp_min_revenue') || '30000';
+  const userId = leadContext.user_id || db.getAdminUserId();
+  const rawMinRevenue = leadContext.minRevenue || db.getSetting('icp_min_revenue', null, userId) || '30000';
   const minRevenue = parseInt(String(rawMinRevenue).replace(/\D/g, '') || '30000', 10);
   const formattedCutoff = `R$ ${minRevenue.toLocaleString('pt-BR')}`;
 
-  const customInbound = leadContext.customInboundInstructions || db.getSetting('amanda_inbound_instructions');
-  const customOutbound = leadContext.customOutboundInstructions || db.getSetting('amanda_outbound_instructions');
+  const customInbound = leadContext.customInboundInstructions || db.getSetting('amanda_inbound_instructions', null, userId);
+  const customOutbound = leadContext.customOutboundInstructions || db.getSetting('amanda_outbound_instructions', null, userId);
 
   const currentLeadInfo = JSON.stringify({
     nome_identificado: leadContext.name || 'Ainda não informado',

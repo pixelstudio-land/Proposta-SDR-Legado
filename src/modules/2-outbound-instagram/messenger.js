@@ -63,7 +63,7 @@ class OutboundMessenger {
     if (!fs.existsSync(senderAccount.sessionFile)) {
       console.error(`🚨 [Messenger] Conta @${senderAccount.username} não possui sessão salva em disco (${senderAccount.sessionFile}).`);
       try {
-        db.updateInstagramAccountStatus(senderAccount.id, 'needs_auth');
+        db.updateInstagramAccountStatus(senderAccount.id, 'needs_auth', null, senderAccount.userId);
       } catch (_) {}
       throw new Error(`Conta @${senderAccount.username} requer autenticação (status 'needs_auth'). Importe o cookie sessionid no painel web.`);
     }
@@ -77,7 +77,7 @@ class OutboundMessenger {
     if (loginInput || currentUrl.includes('/accounts/login') || currentUrl.includes('/challenge')) {
       console.error(`🚨 [Messenger] Sessão de @${senderAccount.username} expirou ou foi invalidada.`);
       try {
-        db.updateInstagramAccountStatus(senderAccount.id, 'needs_auth');
+        db.updateInstagramAccountStatus(senderAccount.id, 'needs_auth', null, senderAccount.userId);
       } catch (_) {}
       throw new Error(`Sessão da conta @${senderAccount.username} expirou (status 'needs_auth'). Importe um novo cookie sessionid no painel web.`);
     }
@@ -99,24 +99,26 @@ class OutboundMessenger {
   /**
    * Dispara mensagens frias para os leads aprovados
    */
-  async sendColdDms(maxBatch = 5) {
-    // 1. Busca leads prontos para envio (fonte outbound_instagram ou leads do Maps com @instagram preenchido)
+  async sendColdDms(maxBatch = 5, userId = null) {
+    const uid = Number(userId) || db.getAdminUserId();
+    // 1. Busca leads prontos para envio estritamente do tenant
     const approvedLeads = db.db.prepare(`
-      SELECT * FROM leads 
-      WHERE (source = 'outbound_instagram' OR (instagram IS NOT NULL AND instagram != '')) 
+      SELECT * FROM leads
+      WHERE user_id = ?
+        AND (source = 'outbound_instagram' OR (instagram IS NOT NULL AND instagram != ''))
         AND status IN ('in_qualification', 'new')
       ORDER BY id ASC
       LIMIT ?
-    `).all(maxBatch);
+    `).all(uid, maxBatch);
 
     if (approvedLeads.length === 0) {
       console.log('ℹ️ [Messenger] Nenhum lead aprovado aguardando envio no momento.');
       return { sent: 0, skipped: 0 };
     }
 
-    console.log(`📬 [Messenger] Iniciando disparo para lote de ${approvedLeads.length} leads aprovados...`);
+    console.log(`📬 [Messenger] (User #${uid}) Iniciando disparo para lote de ${approvedLeads.length} leads aprovados...`);
 
-    let currentSender = accountRotator.getNextAvailableSenderAccount();
+    let currentSender = accountRotator.getNextAvailableSenderAccount(uid);
     let { browser, context, page } = await this.initBrowser(currentSender);
 
     let sentCount = 0;
@@ -128,25 +130,25 @@ class OutboundMessenger {
       for (const lead of approvedLeads) {
         const username = (lead.instagram || lead.identifier || '').replace('@', '').trim();
 
-        // 2. Proteção Anti-Duplicação: checa se recebeu mensagem nos últimos 90 dias
+        // 2. Proteção Anti-Duplicação por tenant
         const recentMessage = db.db.prepare(`
-          SELECT id FROM message_logs 
-          WHERE lead_id = ? AND sent_at >= datetime('now', '-90 days')
-        `).get(lead.id);
+          SELECT id FROM message_logs
+          WHERE user_id = ? AND lead_id = ? AND sent_at >= datetime('now', '-90 days')
+        `).get(uid, lead.id);
 
         if (recentMessage) {
           console.log(`⏭️ [Messenger] Pulando ${lead.identifier}: já abordado nos últimos 90 dias.`);
-          db.updateLeadStatus(lead.id, 'contacted', 'Lead já contatado nos últimos 90 dias');
+          db.updateLeadStatus(lead.id, 'contacted', 'Lead já contatado nos últimos 90 dias', null, uid);
           skippedCount++;
           continue;
         }
 
         // 3. Checa cota da conta atual e rotaciona se necessário
-        const sentToday = db.getDailySentCount(currentSender.username);
+        const sentToday = db.getDailySentCount(currentSender.username, uid);
         if (sentToday >= currentSender.dailyLimit) {
           console.warn(`🔄 [Messenger] Cota da conta @${currentSender.username} atingida. Rotacionando...`);
           await browser.close();
-          currentSender = accountRotator.getNextAvailableSenderAccount();
+          currentSender = accountRotator.getNextAvailableSenderAccount(uid);
           const newSession = await this.initBrowser(currentSender);
           browser = newSession.browser;
           context = newSession.context;
@@ -154,9 +156,9 @@ class OutboundMessenger {
           await this.ensureAuthenticated(page, context, currentSender);
         }
 
-        // 4. Gera a cópia personalizada usando o template configurado ou GPT-4o-mini
+        // 4. Gera a cópia personalizada usando o template do tenant ou GPT-4o-mini
         console.log(`✍️ [Messenger] Gerando mensagem fria para ${lead.identifier}...`);
-        const customInstaTemplate = db.getSetting('instagram_cold_pitch_template');
+        const customInstaTemplate = db.getSetting('instagram_cold_pitch_template', null, uid);
         let messageText = '';
         if (customInstaTemplate && customInstaTemplate.trim().length > 10) {
           const company = lead.company_name || lead.name || `@${username}`;
@@ -173,7 +175,7 @@ class OutboundMessenger {
             username,
             niche: lead.niche,
             bio: lead.ai_summary
-          });
+          }, uid);
         }
 
         console.log(`💬 [Messenger] Mensagem gerada: "${messageText}"`);
@@ -188,7 +190,7 @@ class OutboundMessenger {
 
         if (!messageBtn) {
           console.warn(`⚠️ [Messenger] Botão de mensagem não encontrado para @${username}. Pode ser perfil privado ou com Direct restrito.`);
-          db.updateLeadStatus(lead.id, 'disqualified', 'Direct desabilitado ou restrito');
+          db.updateLeadStatus(lead.id, 'disqualified', 'Direct desabilitado ou restrito', null, uid);
           skippedCount++;
           continue;
         }
@@ -208,15 +210,15 @@ class OutboundMessenger {
         await this.sleep(this.randomDelay(2000, 3500));
 
         // 9. Registra log de envio no SQLite WAL e atualiza lead
-        db.logSentMessage(lead.id, currentSender.username, messageText);
-        db.updateLeadStatus(lead.id, 'contacted', `Cold DM enviada via @${currentSender.username}`);
+        db.logSentMessage(lead.id, currentSender.username, messageText, uid);
+        db.updateLeadStatus(lead.id, 'contacted', `Cold DM enviada via @${currentSender.username}`, null, uid);
         sentCount++;
 
         console.log(`🚀 [Messenger] DM enviada com sucesso para ${lead.identifier} via @${currentSender.username}! (${sentToday + 1}/${currentSender.dailyLimit} hoje)`);
 
-        // 10. Delay de segurança orgânico obrigatório entre disparos (120s a 300s em produção)
+        // 10. Delay de segurança orgânico obrigatório entre disparos
         const delaySeconds = settings.server.nodeEnv === 'development'
-          ? this.randomDelay(10, 20) // Em modo dev delay menor para testes
+          ? this.randomDelay(10, 20)
           : this.randomDelay(settings.outbound.minDelaySeconds, settings.outbound.maxDelaySeconds);
 
         console.log(`⏳ [Messenger] Aguardando pausa de segurança de ${delaySeconds} segundos antes do próximo envio...`);
@@ -225,7 +227,7 @@ class OutboundMessenger {
 
     } catch (error) {
       console.error(`🚨 [Messenger] Erro crítico no envio: ${error.message}`);
-      accountRotator.markAccountChallenged('sender', currentSender.username, error.message);
+      accountRotator.markAccountChallenged('sender', currentSender.username, error.message, uid);
       throw error;
     } finally {
       await browser.close();

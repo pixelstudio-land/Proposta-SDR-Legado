@@ -7,24 +7,20 @@ import db from '../database/db.js';
  */
 export function buildLeadDossier(leadData) {
   const company = leadData.company_name || leadData.name || 'Lead SDR IA';
-  const contact = leadData.name || 'Decisor Comercial';
   let niche = leadData.niche || 'Geral / Não informado';
   if (niche.includes(',')) niche = niche.split(',')[0].trim();
 
   const revenue = leadData.revenue_range || 'Não informado';
-  
-  // Telefone formatado e tipo
   const phone = leadData.phone || 'Sem telefone';
   const isMobile = leadData.phone_type === 'mobile' || (leadData.phone && String(leadData.phone).length === 13);
   const phoneTypeLabel = isMobile ? 'Celular' : (leadData.phone_type === 'landline' ? 'Fixo com WhatsApp' : 'Comercial');
-  
-  // Extração de Cidade, Endereço, Site, Nota e Avaliações
+
   let address = 'Não informado';
   let city = 'Não informada';
   let website = 'Não informado';
   let rating = null;
   let reviews = null;
-  
+
   if (leadData.ai_summary) {
     const matchAddr = leadData.ai_summary.match(/Minerado GMN:\s*([^|]+)/i);
     if (matchAddr && matchAddr[1]) address = matchAddr[1].trim();
@@ -39,16 +35,13 @@ export function buildLeadDossier(leadData) {
     }
   }
 
-  // Extrai cidade com parser inteligente de endereços brasileiros
   if (leadData.city && typeof leadData.city === 'string' && leadData.city.trim().length > 1) {
     city = leadData.city.trim();
   } else if (address && address !== 'Não informado' && address !== 'Sem endereço') {
-    // Padrão 1: ", Nome da Cidade - UF" (ex: ", Jundiaí - SP, 13207-140")
     const matchUf = address.match(/(?:,\s*|\s+)([^,0-9\-\n]+?)\s*-\s*([A-Za-z]{2})\b/);
     if (matchUf && matchUf[1] && matchUf[2]) {
       city = `${matchUf[1].trim()} - ${matchUf[2].toUpperCase()}`;
     } else {
-      // Padrão 2: antes do CEP ", Cidade, 13207-140"
       const cepMatch = address.match(/(?:,\s*|\s+)([^,0-9]+?)(?:,\s*|\s+)\d{5}-\d{3}/);
       if (cepMatch && cepMatch[1]) {
         city = cepMatch[1].trim();
@@ -66,7 +59,6 @@ export function buildLeadDossier(leadData) {
   const ratingSummary = rating ? `${rating} (${reviews || '0'} avaliacoes)` : 'Não aplicável / Não minerado';
   const instagramHandle = leadData.instagram || (leadData.identifier && leadData.identifier.startsWith('@') ? leadData.identifier : null);
 
-  // Resumo da conversa com a Amanda IA
   let aiSummary = leadData.ai_summary || '';
   if (aiSummary.includes('Minerado GMN:')) {
     aiSummary = `Lead qualificado no Google Maps com WhatsApp ativo pronto para atendimento.`;
@@ -89,22 +81,15 @@ ${aiSummary || 'Lead qualificado e pronto para atendimento do consultor.'}`;
 }
 
 class CrmIntegrationClient {
-  constructor() {
-    this.webhookUrl = settings.crm.webhookUrl;
-    this.bearerToken = settings.crm.bearerToken;
-  }
-
-  /**
-   * Envia o lead qualificado em tempo real para o CRM configurado via Webhook HTTP POST
-   */
   async sendLeadToCrm(leadData) {
-    const targetUrl = db.getSetting('crm_webhook_url') || this.webhookUrl || settings.crm.webhookUrl;
-    const targetToken = db.getSetting('crm_api_key') || this.bearerToken || settings.crm.bearerToken;
+    const userId = leadData.user_id || db.getAdminUserId();
+    const targetUrl = db.getSetting('crm_webhook_url', null, userId) || '';
+    const targetToken = db.getSetting('crm_api_key', null, userId) || '';
 
     if (!targetUrl) {
       return {
         success: false,
-        error: 'CRM_WEBHOOK_URL não configurada nas Configurações do painel ou .env'
+        error: 'CRM_WEBHOOK_URL não configurada nas Configurações desta conta.'
       };
     }
 
@@ -125,7 +110,6 @@ class CrmIntegrationClient {
       ai_summary: dossierText,
       created_at: leadData.created_at || new Date().toISOString(),
 
-      // Campos compatíveis com o Capture Webhook do CRM Legado
       nome: leadData.company_name || leadData.name || 'Lead SDR IA',
       numero: leadData.phone || null,
       telefone: leadData.phone || null,
@@ -151,8 +135,10 @@ class CrmIntegrationClient {
         timeout: 9000
       });
 
-      // Pós-processamento rico no Supabase: força origem, notas, detalhes e injeta o Dossiê na primeira mensagem do chat
-      await this.enrichLeadAndChatInSupabase(leadData, dossierText);
+      // Pós-processamento no Supabase apenas quando o destino é o CRM central Legado
+      if (targetUrl.includes('central.legadomidia.com')) {
+        await this.enrichLeadAndChatInSupabase(leadData, dossierText);
+      }
 
       return {
         success: true,
@@ -173,9 +159,6 @@ class CrmIntegrationClient {
     }
   }
 
-  /**
-   * Atualiza metadados e injeta a primeira mensagem com o Dossiê Rico no chat do CRM
-   */
   async enrichLeadAndChatInSupabase(leadData, dossierText) {
     try {
       const supabaseUrl = process.env.SUPABASE_URL || 'https://xndcrwpnwfmwxmulziwo.supabase.co';
@@ -200,19 +183,14 @@ class CrmIntegrationClient {
         'Content-Type': 'application/json'
       };
 
-      // 1. Busca o lead recém-inserido pelo webhook
       const searchRes = await axios.get(
         `${supabaseUrl}/rest/v1/leads?whatsapp=eq.${cleanPhone}&order=created_at.desc&limit=1`,
         { headers, timeout: 6000 }
       );
 
       const crmLead = searchRes.data?.[0];
-      if (!crmLead) {
-        console.warn(`[CRM] Lead com whatsapp ${cleanPhone} não localizado no Supabase.`);
-        return;
-      }
+      if (!crmLead) return;
 
-      // 2. Atualiza origem, notas, detalhes, nome da empresa e última mensagem no card do Kanban
       await axios.patch(
         `${supabaseUrl}/rest/v1/leads?id=eq.${crmLead.id}`,
         {
@@ -220,12 +198,11 @@ class CrmIntegrationClient {
           company_name: leadData.company_name || leadData.name || null,
           notes: dossierText,
           detalhes: dossierText,
-          last_message: `Dossiê SDR IA: ${leadData.company_name || leadData.name}`
+          last_message: `Dossie SDR IA: ${leadData.company_name || leadData.name}`
         },
         { headers, timeout: 6000 }
       );
 
-      // 3. Se houver conversa vinculada, injeta o Dossiê completo na primeira mensagem do chat
       if (crmLead.conversation_id) {
         const msgCheck = await axios.get(
           `${supabaseUrl}/rest/v1/messages?conversation_id=eq.${crmLead.conversation_id}&limit=5`,
@@ -233,7 +210,7 @@ class CrmIntegrationClient {
         );
 
         const existingMessages = msgCheck.data || [];
-        const hasDossier = existingMessages.some(m => m.content && m.content.includes('DOSSIÊ COMERCIAL SDR IA'));
+        const hasDossier = existingMessages.some(m => m.content && m.content.includes('DOSSIE COMERCIAL SDR IA'));
 
         if (!hasDossier) {
           await axios.post(
@@ -249,7 +226,6 @@ class CrmIntegrationClient {
             { headers, timeout: 6000 }
           );
 
-          // Atualiza prévia da conversa
           await axios.patch(
             `${supabaseUrl}/rest/v1/conversations?id=eq.${crmLead.conversation_id}`,
             {
@@ -258,20 +234,11 @@ class CrmIntegrationClient {
             },
             { headers, timeout: 6000 }
           );
-          console.log(`[CRM] Dossie completo injetado no chat da conversa #${crmLead.conversation_id}`);
         }
       }
     } catch (err) {
       console.warn(`[CRM] Erro ao enriquecer lead e chat no Supabase: ${err.message}`);
     }
-  }
-
-  /**
-   * Força a origem correta no Supabase do CRM (compatibilidade com chamadas legadas)
-   */
-  async ensureCorrectOrigin(leadData) {
-    const dossier = buildLeadDossier(leadData);
-    return this.enrichLeadAndChatInSupabase(leadData, dossier);
   }
 }
 

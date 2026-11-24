@@ -3,18 +3,19 @@ import openaiClient from '../../ai/openai-client.js';
 
 class ProfileFilterEngine {
   /**
-   * Varre os leads pendentes de outbound coletados no SQLite e aplica auditoria cognitiva via IA
+   * Varre os leads pendentes de outbound do tenant e aplica auditoria cognitiva via IA
    */
-  async filterPendingLeads() {
-    // Busca leads pendentes de outbound (coletados pelo scraper de seguidores ou minerados no Maps com @instagram)
+  async filterPendingLeads(userId = null) {
+    const uid = Number(userId) || db.getAdminUserId();
     const pendingLeads = db.db.prepare(`
-      SELECT * FROM leads 
-      WHERE (source = 'outbound_instagram' OR (instagram IS NOT NULL AND instagram != '')) 
+      SELECT * FROM leads
+      WHERE user_id = ?
+        AND (source = 'outbound_instagram' OR (instagram IS NOT NULL AND instagram != ''))
         AND status IN ('new', 'no_whatsapp')
       ORDER BY id ASC
-    `).all();
+    `).all(uid);
 
-    console.log(`🧠 [ProfileFilter] Iniciando auditoria cognitiva de ${pendingLeads.length} leads pendentes...`);
+    console.log(`🧠 [ProfileFilter] (User #${uid}) Iniciando auditoria cognitiva de ${pendingLeads.length} leads pendentes...`);
 
     const results = {
       total: pendingLeads.length,
@@ -26,30 +27,25 @@ class ProfileFilterEngine {
       const targetHandle = (lead.instagram || lead.identifier || '').replace('@', '').trim();
       const bioText = lead.ai_summary || '';
 
-      // 1. Filtro rápido de sanidade: bio vazia ou muito curta
       if (!bioText || bioText.length < 5 || bioText === 'Sem bio informada') {
-        db.updateLeadStatus(lead.id, 'disqualified', 'Descartado: biografia ausente ou insuficiente');
+        db.updateLeadStatus(lead.id, 'disqualified', 'Descartado: biografia ausente ou insuficiente', null, uid);
         results.disqualified.push({ id: lead.id, identifier: targetHandle, reason: 'Sem bio' });
-        console.log(`❌ [ProfileFilter] @${targetHandle}: Desqualificado (sem bio)`);
         continue;
       }
 
-      // 2. Auditoria Cognitiva com GPT-4o-mini
       try {
-        console.log(`🤖 [ProfileFilter] Auditando bio de @${targetHandle} via GPT-4o-mini: "${bioText.slice(0, 50)}..."`);
-        const audit = await openaiClient.auditProfileBio(bioText, targetHandle);
+        const audit = await openaiClient.auditProfileBio(bioText, targetHandle, uid);
 
         if (audit.isCommercialDecisionMaker && audit.confidenceScore >= 60) {
-          // Aprovado para abordagem fria
           const summary = `ICP Aprovado (${audit.confidenceScore}% conf.): ${audit.reasoning}`;
           db.db.prepare(`
-            UPDATE leads SET 
-              status = 'in_qualification', 
-              niche = ?, 
+            UPDATE leads SET
+              status = 'in_qualification',
+              niche = ?,
               ai_summary = ?,
               updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-          `).run(audit.detectedNiche, summary, lead.id);
+            WHERE id = ? AND user_id = ?
+          `).run(audit.detectedNiche, summary, lead.id, uid);
 
           results.approved.push({
             id: lead.id,
@@ -58,26 +54,20 @@ class ProfileFilterEngine {
             confidence: audit.confidenceScore,
             reasoning: audit.reasoning
           });
-
-          console.log(`🎯 [ProfileFilter] ${lead.identifier}: APROVADO [${audit.detectedNiche}] - ${audit.reasoning}`);
         } else {
-          // Desqualificado
           const summary = `Descarte (${audit.confidenceScore}% conf.): ${audit.reasoning}`;
-          db.updateLeadStatus(lead.id, 'disqualified', summary);
+          db.updateLeadStatus(lead.id, 'disqualified', summary, null, uid);
           results.disqualified.push({
             id: lead.id,
             identifier: lead.identifier,
             reason: audit.reasoning
           });
-
-          console.log(`🚫 [ProfileFilter] ${lead.identifier}: REPROVADO - ${audit.reasoning}`);
         }
       } catch (err) {
         console.warn(`⚠️ [ProfileFilter] Falha ao auditar ${lead.identifier}: ${err.message}`);
       }
     }
 
-    console.log(`🏁 [ProfileFilter] Concluído: ${results.approved.length} aprovados | ${results.disqualified.length} descartados.`);
     return results;
   }
 }

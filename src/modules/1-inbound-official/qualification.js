@@ -2,25 +2,20 @@ import db from '../../database/db.js';
 import { parser } from '../../ai/parser.js';
 
 class LeadQualificationEngine {
-  /**
-   * Avalia os dados extraídos pelo modelo de IA e consolida os campos no banco de dados
-   */
-  evaluateAndSaveLead(leadId, extractedData = {}, newStatus = 'in_qualification') {
+  evaluateAndSaveLead(leadId, extractedData = {}, newStatus = 'in_qualification', userId = null) {
     if (!leadId) {
       throw new Error('leadId obrigatório para salvar qualificação.');
     }
-
-    const currentLead = db.getLeadById(leadId);
+    const uid = userId || db.getAdminUserId();
+    const currentLead = db.getLeadById(leadId, uid);
     if (!currentLead) {
-      throw new Error(`Lead #${leadId} não encontrado no banco.`);
+      throw new Error(`Lead #${leadId} não encontrado no banco para este usuário.`);
     }
 
-    // Se o lead já havia sido qualificado previamente, preserva o status para não regredir
     const finalStatus = currentLead.status === 'qualified' && newStatus !== 'qualified'
       ? 'qualified'
       : newStatus;
 
-    // Higieniza telefone se fornecido no turno
     let formattedPhone = currentLead.phone;
     let phoneType = currentLead.phone_type;
     let isWhatsappActive = currentLead.is_whatsapp_active;
@@ -46,7 +41,7 @@ class LeadQualificationEngine {
       ai_summary: extractedData.ai_summary || currentLead.ai_summary
     };
 
-    return db.createOrUpdateLead(updatePayload);
+    return db.createOrUpdateLead(updatePayload, uid);
   }
 
   isLeadQualified(lead) {

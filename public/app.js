@@ -8,6 +8,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Estado local
   let allLeads = [];
   let pollInterval = null;
+  let currentUser = null;
+  let heartbeatInterval = null;
+  let selectedWaSessionId = null;
 
   // Helper de escuta segura de eventos do DOM (previne exceção se elemento for nulo)
   function safeListen(elem, event, handler) {
@@ -16,33 +19,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Interceptador Global de Fetch para Autenticação Administrativa
+  // Interceptador Global de Fetch com Cookie HTTP-only (Same-Origin)
   const originalFetch = window.fetch;
   window.fetch = async function (...args) {
     let [resource, config] = args;
     config = config ? { ...config } : {};
-
-    let headers = config.headers;
-    if (headers instanceof Headers) {
-      const token = localStorage.getItem('legado_admin_token');
-      if (token) headers.set('x-admin-token', token);
-      config.headers = headers;
-    } else {
-      config.headers = { ...(headers || {}) };
-      const token = localStorage.getItem('legado_admin_token');
-      if (token) {
-        config.headers['x-admin-token'] = token;
-      }
-    }
+    config.credentials = 'same-origin';
 
     const response = await originalFetch(resource, config);
 
-    // Se a rota exigiu autenticação e falhou
+    // Se a rota exigiu autenticação e falhou (sessão expirada / usuário desativado)
     if (response.status === 401) {
       try {
         const clone = response.clone();
         const data = await clone.json();
         if (data.require_auth) {
+          currentUser = null;
+          hideDashboard();
           showLoginOverlay();
         }
       } catch { }
@@ -142,8 +135,28 @@ document.addEventListener('DOMContentLoaded', () => {
   const settingsModalBtnClose = document.getElementById('settingsModalBtnClose');
   const btnTabAccounts = document.getElementById('btnTabAccounts');
   const btnTabApis = document.getElementById('btnTabApis');
+  const btnTabClients = document.getElementById('btnTabClients');
   const tabAccountsContent = document.getElementById('tabAccountsContent');
   const tabApisContent = document.getElementById('tabApisContent');
+  const tabClientsContent = document.getElementById('tabClientsContent');
+  const crmDestinationGroup = document.getElementById('crmDestinationGroup');
+
+  // Aba 3: Gestão de Clientes (Exclusiva Admin)
+  const appTopbar = document.getElementById('appTopbar');
+  const appMainContainer = document.getElementById('appMainContainer');
+  const userRoleBadge = document.getElementById('userRoleBadge');
+  const userEmailBadge = document.getElementById('userEmailBadge');
+  const btnOpenAdminClients = document.getElementById('btnOpenAdminClients');
+  const formCreateUser = document.getElementById('formCreateUser');
+  const newUserEmail = document.getElementById('newUserEmail');
+  const newUserPassword = document.getElementById('newUserPassword');
+  const newUserMaxChips = document.getElementById('newUserMaxChips');
+  const newUserRole = document.getElementById('newUserRole');
+  const btnCreateUser = document.getElementById('btnCreateUser');
+  const createUserFeedback = document.getElementById('createUserFeedback');
+  const usersTableBody = document.getElementById('usersTableBody');
+  const usersBadgeCount = document.getElementById('usersBadgeCount');
+  const btnRefreshUsers = document.getElementById('btnRefreshUsers');
 
   // Aba 1 - Bloco 1: Conta Principal Oficial
   const formOfficialSettings = document.getElementById('formOfficialSettings');
@@ -206,19 +219,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // Elementos do DOM - Login & Logout
   const loginOverlay = document.getElementById('loginOverlay');
   const formLogin = document.getElementById('formLogin');
+  const loginEmail = document.getElementById('loginEmail');
   const loginPassword = document.getElementById('loginPassword');
   const btnLoginSubmit = document.getElementById('btnLoginSubmit');
   const btnLoginText = document.getElementById('btnLoginText');
   const loginFeedback = document.getElementById('loginFeedback');
   const btnLogout = document.getElementById('btnLogout');
 
-  // Elementos do DOM - WhatsApp Nativo (Baileys)
+  // Elementos do DOM - WhatsApp Nativo (Baileys Multi-Chip)
   const btnWaIndicator = document.getElementById('btnWaIndicator');
   const waPulseDot = document.getElementById('waPulseDot');
   const waStatusText = document.getElementById('waStatusText');
   const waStatusMeta = document.getElementById('waStatusMeta');
   const waModal = document.getElementById('waModal');
   const waModalClose = document.getElementById('waModalClose');
+  const waSessionSelect = document.getElementById('waSessionSelect');
+  const waChipsQuotaBadge = document.getElementById('waChipsQuotaBadge');
+  const btnWaAddSession = document.getElementById('btnWaAddSession');
   const waStatusBanner = document.getElementById('waStatusBanner');
   const waModalPulseDot = document.getElementById('waModalPulseDot');
   const waModalStatusTitle = document.getElementById('waModalStatusTitle');
@@ -1257,11 +1274,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // ============================================================================
   async function loadConfig() {
     try {
-      // 1. Carregar lista de Kanbans/Destinos do CRM via Supabase
+      // 1. Carregar lista de Kanbans/Destinos do CRM via Supabase (somente Admin)
       try {
         const destRes = await fetch('/api/dashboard/crm-destinations');
         const destData = await destRes.json();
-        if (destData.success && destData.destinations && cfgCrmDestination) {
+        if (destData.success && Array.isArray(destData.destinations) && destData.destinations.length > 0 && cfgCrmDestination) {
+          if (crmDestinationGroup) crmDestinationGroup.classList.remove('hidden');
           cfgCrmDestination.innerHTML = '';
           destData.destinations.forEach(d => {
             const opt = document.createElement('option');
@@ -1270,6 +1288,8 @@ document.addEventListener('DOMContentLoaded', () => {
             if (d.user_id) opt.dataset.userId = d.user_id;
             cfgCrmDestination.appendChild(opt);
           });
+        } else if (crmDestinationGroup) {
+          crmDestinationGroup.classList.add('hidden');
         }
       } catch (e) {
         console.warn('Erro ao carregar destinos CRM:', e);
@@ -1539,6 +1559,9 @@ document.addEventListener('DOMContentLoaded', () => {
     switchSettingsTab(defaultTab);
     loadAccounts();
     loadConfig();
+    if (currentUser && currentUser.role === 'admin') {
+      loadAdminUsers();
+    }
   }
 
   function closeSettingsModal() {
@@ -1546,25 +1569,154 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function switchSettingsTab(tab) {
-    if (tab === 'accounts') {
-      if (btnTabAccounts) btnTabAccounts.classList.add('active');
-      if (btnTabApis) btnTabApis.classList.remove('active');
-      if (tabAccountsContent) tabAccountsContent.classList.remove('hidden');
-      if (tabApisContent) tabApisContent.classList.add('hidden');
-    } else {
-      if (btnTabApis) btnTabApis.classList.add('active');
-      if (btnTabAccounts) btnTabAccounts.classList.remove('active');
-      if (tabApisContent) tabApisContent.classList.remove('hidden');
-      if (tabAccountsContent) tabAccountsContent.classList.add('hidden');
+    const isAdmin = Boolean(currentUser && currentUser.role === 'admin');
+    const targetTab = (tab === 'clients' && !isAdmin) ? 'accounts' : tab;
+
+    if (btnTabAccounts) btnTabAccounts.classList.toggle('active', targetTab === 'accounts');
+    if (btnTabApis) btnTabApis.classList.toggle('active', targetTab === 'apis');
+    if (btnTabClients) btnTabClients.classList.toggle('active', targetTab === 'clients');
+
+    if (tabAccountsContent) tabAccountsContent.classList.toggle('hidden', targetTab !== 'accounts');
+    if (tabApisContent) tabApisContent.classList.toggle('hidden', targetTab !== 'apis');
+    if (tabClientsContent) tabClientsContent.classList.toggle('hidden', targetTab !== 'clients');
+
+    if (targetTab === 'clients' && isAdmin) {
+      loadAdminUsers();
     }
   }
 
   safeListen(btnOpenSettings, 'click', () => openSettingsModal('accounts'));
+  safeListen(btnOpenAdminClients, 'click', () => openSettingsModal('clients'));
   safeListen(kpiAccountsCard, 'click', () => openSettingsModal('accounts'));
   safeListen(settingsModalClose, 'click', closeSettingsModal);
   safeListen(settingsModalBtnClose, 'click', closeSettingsModal);
   safeListen(btnTabAccounts, 'click', () => switchSettingsTab('accounts'));
   safeListen(btnTabApis, 'click', () => switchSettingsTab('apis'));
+  safeListen(btnTabClients, 'click', () => switchSettingsTab('clients'));
+  safeListen(btnRefreshUsers, 'click', () => loadAdminUsers());
+
+  // ============================================================================
+  // 9.1 GESTÃO DE CLIENTES SAAS (SOMENTE ADMIN)
+  // ============================================================================
+  async function loadAdminUsers() {
+    if (!currentUser || currentUser.role !== 'admin' || !usersTableBody) return;
+    try {
+      const res = await fetch('/api/admin/users');
+      const data = await res.json();
+      if (!res.ok || !data.success) return;
+
+      const users = data.users || [];
+      if (usersBadgeCount) usersBadgeCount.textContent = `${users.length} usuário${users.length === 1 ? '' : 's'}`;
+
+      if (users.length === 0) {
+        usersTableBody.innerHTML = '<tr><td colspan="6" class="table-msg">Nenhum usuário cadastrado.</td></tr>';
+        return;
+      }
+
+      usersTableBody.innerHTML = users.map(u => {
+        const isSelf = Number(u.id) === Number(currentUser.id);
+        const isActive = Number(u.active) === 1;
+        const statusPill = isActive
+          ? '<span class="status-pill running">Ativo</span>'
+          : '<span class="status-pill" style="background: rgba(239,68,68,0.12); color: var(--red); border-color: rgba(239,68,68,0.3);">Inativo</span>';
+        const roleBadge = u.role === 'admin'
+          ? '<span class="badge-official" style="font-size: 10px;">ADMIN</span>'
+          : '<span class="records-pill font-mono">USER</span>';
+        const toggleBtn = isSelf
+          ? '<span style="font-size: 11px; color: var(--text-muted);">Você (Admin)</span>'
+          : `<button type="button" class="btn ${isActive ? 'btn-secondary' : 'btn-emerald'} btn-xs btn-toggle-user-active" data-user-id="${u.id}" data-next-active="${isActive ? '0' : '1'}" style="${isActive ? 'color: var(--red); border-color: var(--red-border);' : ''}">
+               ${isActive ? 'Desativar' : 'Ativar'}
+             </button>`;
+
+        return `
+          <tr>
+            <td class="font-mono" style="font-size: 12px;">${escapeHtml(u.email)}</td>
+            <td>${roleBadge}</td>
+            <td class="font-mono">${u.connected_chips || 0} / ${u.max_chips}</td>
+            <td class="font-mono">${u.leads_count || 0}</td>
+            <td>${statusPill}</td>
+            <td style="text-align: right;">
+              <div style="display: inline-flex; align-items: center; gap: 6px;">
+                ${toggleBtn}
+              </div>
+            </td>
+          </tr>
+        `;
+      }).join('');
+
+      usersTableBody.querySelectorAll('.btn-toggle-user-active').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const targetId = btn.dataset.userId;
+          const nextActive = btn.dataset.nextActive === '1';
+          btn.disabled = true;
+          try {
+            const resToggle = await fetch(`/api/admin/users/${targetId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ active: nextActive })
+            });
+            const dataToggle = await resToggle.json();
+            if (!resToggle.ok || !dataToggle.success) {
+              alert(dataToggle.error || 'Erro ao atualizar acesso do usuário.');
+            }
+            await loadAdminUsers();
+          } catch (err) {
+            alert('Falha de rede: ' + err.message);
+          } finally {
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (err) {
+      console.error('Erro ao carregar clientes SaaS:', err);
+    }
+  }
+
+  safeListen(formCreateUser, 'submit', async (e) => {
+    e.preventDefault();
+    if (!currentUser || currentUser.role !== 'admin') return;
+    if (btnCreateUser) btnCreateUser.disabled = true;
+    if (createUserFeedback) {
+      createUserFeedback.textContent = 'Criando conta de cliente...';
+      createUserFeedback.className = 'feedback-text';
+    }
+
+    try {
+      const payload = {
+        email: newUserEmail ? newUserEmail.value.trim() : '',
+        password: newUserPassword ? newUserPassword.value : '',
+        max_chips: newUserMaxChips ? parseInt(newUserMaxChips.value, 10) || 1 : 1,
+        role: newUserRole ? newUserRole.value : 'user'
+      };
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        if (createUserFeedback) {
+          createUserFeedback.textContent = data.error || 'Erro ao criar usuário.';
+          createUserFeedback.className = 'feedback-text error';
+        }
+      } else {
+        if (createUserFeedback) {
+          createUserFeedback.textContent = `Cliente ${data.user.email} criado com sucesso (max_chips=${data.user.max_chips})!`;
+          createUserFeedback.className = 'feedback-text success';
+        }
+        formCreateUser.reset();
+        if (newUserMaxChips) newUserMaxChips.value = 1;
+        await loadAdminUsers();
+      }
+    } catch (err) {
+      if (createUserFeedback) {
+        createUserFeedback.textContent = 'Erro de conexão: ' + err.message;
+        createUserFeedback.className = 'feedback-text error';
+      }
+    } finally {
+      if (btnCreateUser) btnCreateUser.disabled = false;
+    }
+  });
   safeListen(btnOpenWaModalFromSettings, 'click', () => {
     closeSettingsModal();
     openWhatsAppModal();
@@ -1697,11 +1849,48 @@ document.addEventListener('DOMContentLoaded', () => {
   // ============================================================================
   // 9. GERENCIAMENTO DO WHATSAPP BAILEYS NATIVO (MODAL, QR CODE & STATUS)
   // ============================================================================
+  function renderWaSessionsDropdown(sessions, maxChips, activeSessionId) {
+    if (waSessionSelect && Array.isArray(sessions)) {
+      const targetId = activeSessionId || selectedWaSessionId || (sessions[0] && sessions[0].id) || null;
+      waSessionSelect.innerHTML = '';
+      sessions.forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = String(s.id);
+        const phoneSuffix = s.phone_number ? ` (+${s.phone_number})` : '';
+        const statusSuffix = s.connected ? ' • Online' : '';
+        opt.textContent = `${s.session_name}${phoneSuffix}${statusSuffix}`;
+        if (targetId && Number(s.id) === Number(targetId)) {
+          opt.selected = true;
+        }
+        waSessionSelect.appendChild(opt);
+      });
+      if (targetId) selectedWaSessionId = Number(targetId);
+    }
+
+    if (waChipsQuotaBadge && Array.isArray(sessions)) {
+      const limit = maxChips ?? (currentUser && currentUser.max_chips) ?? 1;
+      waChipsQuotaBadge.textContent = `${sessions.length}/${limit} chips`;
+    }
+
+    if (btnWaAddSession && Array.isArray(sessions)) {
+      const limit = maxChips ?? (currentUser && currentUser.max_chips) ?? 1;
+      btnWaAddSession.disabled = sessions.length >= limit;
+      btnWaAddSession.title = sessions.length >= limit
+        ? `Limite de ${limit} chip(s) atingido para sua conta`
+        : 'Adicionar novo chip WhatsApp dentro do seu limite';
+    }
+  }
+
   async function fetchWhatsAppStatus() {
     try {
-      const res = await fetch('/api/whatsapp/status');
+      const qs = selectedWaSessionId ? `?sessionId=${encodeURIComponent(selectedWaSessionId)}` : '';
+      const res = await fetch(`/api/whatsapp/status${qs}`);
       const data = await res.json();
       if (!data.success) return null;
+      if (data.activeSession && data.activeSession.id) {
+        selectedWaSessionId = Number(data.activeSession.id);
+      }
+      renderWaSessionsDropdown(data.sessions, data.maxChips, selectedWaSessionId);
       renderWhatsAppStatus(data);
       return data;
     } catch (err) {
@@ -1712,9 +1901,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   async function fetchWhatsAppQr() {
     try {
-      const res = await fetch('/api/whatsapp/qr');
+      const qs = selectedWaSessionId ? `?sessionId=${encodeURIComponent(selectedWaSessionId)}` : '';
+      const res = await fetch(`/api/whatsapp/qr${qs}`);
       const data = await res.json();
       if (!data.success) return null;
+      if (data.activeSession && data.activeSession.id) {
+        selectedWaSessionId = Number(data.activeSession.id);
+      }
+      renderWaSessionsDropdown(data.sessions, data.maxChips, selectedWaSessionId);
       renderWhatsAppStatus(data, data.qr);
       return data;
     } catch (err) {
@@ -1922,12 +2116,47 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target === waModal) closeWhatsAppModal();
   });
 
+  safeListen(waSessionSelect, 'change', () => {
+    const val = Number(waSessionSelect.value);
+    if (!Number.isNaN(val) && val > 0) {
+      selectedWaSessionId = val;
+      fetchWhatsAppQr();
+    }
+  });
+
+  safeListen(btnWaAddSession, 'click', async () => {
+    const suggestedName = `Chip ${(waSessionSelect?.options?.length || 0) + 1}`;
+    const sessionName = prompt('Digite um nome identificador para o novo chip WhatsApp:', suggestedName);
+    if (!sessionName || !sessionName.trim()) return;
+
+    try {
+      const res = await fetch('/api/whatsapp/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_name: sessionName.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || 'Não foi possível criar o novo chip.');
+        return;
+      }
+      selectedWaSessionId = Number(data.session.id);
+      await fetchWhatsAppQr();
+    } catch (err) {
+      alert(`Erro ao criar chip: ${err.message}`);
+    }
+  });
+
   safeListen(btnWaRefreshQr, 'click', async () => {
     if (waModalStatusTitle) waModalStatusTitle.textContent = 'Reiniciando motor Baileys...';
     if (waQrImage) waQrImage.style.display = 'none';
     if (waQrSpinner) waQrSpinner.style.display = 'flex';
     try {
-      await fetch('/api/whatsapp/reconnect', { method: 'POST' });
+      await fetch('/api/whatsapp/reconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: selectedWaSessionId })
+      });
       setTimeout(fetchWhatsAppQr, 1000);
     } catch (err) {
       console.error('Erro ao reconectar WhatsApp:', err);
@@ -1935,11 +2164,15 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   safeListen(btnWaDisconnectSession, 'click', async () => {
-    if (!confirm('Deseja realmente desconectar o WhatsApp e limpar as credenciais salvas?')) {
+    if (!confirm('Deseja realmente desconectar este chip WhatsApp e limpar as credenciais salvas?')) {
       return;
     }
     try {
-      await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+      await fetch('/api/whatsapp/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: selectedWaSessionId })
+      });
       await fetchWhatsAppQr();
       await fetchWhatsAppStatus();
     } catch (err) {
@@ -2133,14 +2366,74 @@ document.addEventListener('DOMContentLoaded', () => {
     animate();
   }
 
+  function showDashboard(user) {
+    currentUser = user;
+    const isAdmin = Boolean(user && user.role === 'admin');
+
+    if (appTopbar) appTopbar.classList.remove('hidden');
+    if (appMainContainer) appMainContainer.classList.remove('hidden');
+
+    if (userRoleBadge) {
+      userRoleBadge.textContent = isAdmin ? 'Admin' : 'Cliente';
+      userRoleBadge.style.color = isAdmin ? 'var(--gold)' : 'var(--emerald)';
+    }
+    if (userEmailBadge) {
+      userEmailBadge.textContent = user?.email || '';
+    }
+
+    if (btnOpenAdminClients) btnOpenAdminClients.classList.toggle('hidden', !isAdmin);
+    if (btnTabClients) btnTabClients.classList.toggle('hidden', !isAdmin);
+
+    loadStats();
+    loadLeads();
+    loadExports();
+    loadConfig();
+    loadAccounts();
+    pollLogs();
+    fetchWhatsAppStatus();
+    loadWaDispatcherStatus();
+
+    if (heartbeatInterval) clearInterval(heartbeatInterval);
+    heartbeatInterval = setInterval(() => {
+      if (!currentUser || (loginOverlay && !loginOverlay.classList.contains('hidden'))) return;
+      loadStats();
+      pollLogs();
+      fetchWhatsAppStatus();
+      loadWaDispatcherStatus();
+    }, 3000);
+  }
+
+  function hideDashboard() {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval);
+      heartbeatInterval = null;
+    }
+    closeSettingsModal();
+    closeWhatsAppModal();
+    closeLeadModal();
+    closeSessionCookieModal();
+
+    if (appTopbar) appTopbar.classList.add('hidden');
+    if (appMainContainer) appMainContainer.classList.add('hidden');
+    if (btnOpenAdminClients) btnOpenAdminClients.classList.add('hidden');
+    if (btnTabClients) btnTabClients.classList.add('hidden');
+    if (usersTableBody) usersTableBody.innerHTML = '';
+    selectedWaSessionId = null;
+  }
+
   function showLoginOverlay() {
     if (!loginOverlay) return;
+    hideDashboard();
     loginOverlay.classList.remove('hidden');
     initConstellationBackground();
-    if (loginPassword) {
-      loginPassword.value = '';
-      setTimeout(() => loginPassword.focus(), 150);
-    }
+    if (loginPassword) loginPassword.value = '';
+    setTimeout(() => {
+      if (loginEmail && !loginEmail.value.trim()) {
+        loginEmail.focus();
+      } else if (loginPassword) {
+        loginPassword.focus();
+      }
+    }, 150);
   }
 
   function hideLoginOverlay() {
@@ -2150,27 +2443,29 @@ document.addEventListener('DOMContentLoaded', () => {
 
   safeListen(formLogin, 'submit', async (e) => {
     e.preventDefault();
-    const password = loginPassword ? loginPassword.value.trim() : '';
-    if (!password) return;
+    const email = loginEmail ? loginEmail.value.trim() : '';
+    const password = loginPassword ? loginPassword.value : '';
+    if (!email || !password) return;
 
     if (btnLoginSubmit) btnLoginSubmit.disabled = true;
     if (loginFeedback) {
       loginFeedback.textContent = 'Verificando credenciais...';
-      loginFeedback.className = 'feedback-text';
+      loginFeedback.className = 'login-feedback-text';
     }
 
     try {
       const res = await originalFetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
 
-      if (!res.ok || !data.success) {
+      if (!res.ok || !data.success || !data.user) {
         if (loginFeedback) {
-          loginFeedback.textContent = data.error || 'Senha incorreta.';
-          loginFeedback.className = 'feedback-text error';
+          loginFeedback.textContent = data.error || 'E-mail ou senha inválidos.';
+          loginFeedback.className = 'login-feedback-text error';
         }
         if (btnLoginSubmit) btnLoginSubmit.disabled = false;
         return;
@@ -2178,27 +2473,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
       if (loginFeedback) {
         loginFeedback.textContent = 'Autenticado com sucesso!';
-        loginFeedback.className = 'feedback-text success';
+        loginFeedback.className = 'login-feedback-text success';
       }
-      localStorage.setItem('legado_admin_token', data.token);
 
       setTimeout(() => {
         hideLoginOverlay();
         if (btnLoginSubmit) btnLoginSubmit.disabled = false;
         if (loginFeedback) loginFeedback.textContent = '';
-        // Carrega painel
-        loadStats();
-        loadLeads();
-        loadExports();
-        pollLogs();
-        fetchWhatsAppStatus();
-        loadWaDispatcherStatus();
-      }, 400);
+        showDashboard(data.user);
+      }, 250);
 
     } catch (err) {
       if (loginFeedback) {
         loginFeedback.textContent = `Erro de conexão: ${err.message}`;
-        loginFeedback.className = 'feedback-text error';
+        loginFeedback.className = 'login-feedback-text error';
       }
       if (btnLoginSubmit) btnLoginSubmit.disabled = false;
     }
@@ -2207,48 +2495,31 @@ document.addEventListener('DOMContentLoaded', () => {
   safeListen(btnLogout, 'click', async () => {
     if (!confirm('Deseja encerrar a sessão do painel operacional?')) return;
     try {
-      await originalFetch('/api/auth/logout', { method: 'POST' });
+      await originalFetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin'
+      });
     } catch { }
-    localStorage.removeItem('legado_admin_token');
+    currentUser = null;
     showLoginOverlay();
   });
 
-  // Inicialização com Verificação de Autenticação
+  // Inicialização com Verificação de Autenticação (JWT Cookie HTTP-only)
   async function checkInitialAuth() {
-    const token = localStorage.getItem('legado_admin_token');
-    if (!token) {
-      showLoginOverlay();
-      return;
-    }
+    initConstellationBackground();
 
     try {
       const res = await originalFetch('/api/auth/verify', {
-        headers: { 'x-admin-token': token }
+        credentials: 'same-origin'
       });
       const data = await res.json();
-      if (!res.ok || !data.authenticated) {
+      if (!res.ok || !data.authenticated || !data.user) {
         showLoginOverlay();
         return;
       }
 
-      // Autenticado com sucesso
       hideLoginOverlay();
-      loadStats();
-      loadLeads();
-      loadExports();
-      pollLogs();
-      fetchWhatsAppStatus();
-      loadWaDispatcherStatus();
-
-      // Loop de polling de heartbeat a cada 3s (somente se autenticado)
-      setInterval(() => {
-        if (loginOverlay && !loginOverlay.classList.contains('hidden')) return;
-        loadStats();
-        pollLogs();
-        fetchWhatsAppStatus();
-        loadWaDispatcherStatus();
-      }, 3000);
-
+      showDashboard(data.user);
     } catch {
       showLoginOverlay();
     }

@@ -63,7 +63,7 @@ class TargetScraper {
     if (!fs.existsSync(account.sessionFile)) {
       console.error(`🚨 [TargetScraper] Conta @${account.username} não possui sessão salva em disco (${account.sessionFile}).`);
       try {
-        db.updateInstagramAccountStatus(account.id, 'needs_auth');
+        db.updateInstagramAccountStatus(account.id, 'needs_auth', null, account.userId);
       } catch (_) {}
       throw new Error(`Conta @${account.username} requer autenticação (status 'needs_auth'). Importe o cookie sessionid no painel web.`);
     }
@@ -77,7 +77,7 @@ class TargetScraper {
     if (loginField || currentUrl.includes('/accounts/login') || currentUrl.includes('/challenge')) {
       console.error(`🚨 [TargetScraper] Sessão de @${account.username} expirou ou foi invalidada.`);
       try {
-        db.updateInstagramAccountStatus(account.id, 'needs_auth');
+        db.updateInstagramAccountStatus(account.id, 'needs_auth', null, account.userId);
       } catch (_) {}
       throw new Error(`Sessão da conta @${account.username} expirou (status 'needs_auth'). Importe um novo cookie sessionid no painel web.`);
     }
@@ -86,11 +86,12 @@ class TargetScraper {
   }
 
   /**
-   * Raspa os seguidores de um perfil de referência/concorrente e salva novos leads no SQLite
+   * Raspa os seguidores de um perfil de referência/concorrente e salva novos leads no SQLite do usuário
    */
-  async scrapeFollowers(targetProfile, limit = 20) {
+  async scrapeFollowers(targetProfile, limit = 20, userId = null) {
+    const uid = Number(userId) || db.getAdminUserId();
     const cleanTarget = String(targetProfile).replace('@', '').trim();
-    const account = accountRotator.getNextScraperAccount();
+    const account = accountRotator.getNextScraperAccount(uid);
 
     console.log(`🚀 [TargetScraper] Iniciando extração do perfil @${cleanTarget} usando Scraper @${account.username}`);
 
@@ -141,8 +142,8 @@ class TargetScraper {
       for (const username of Array.from(userHandles).slice(0, limit)) {
         const identifier = `@${username}`;
 
-        // Checagem anti-duplicação no SQLite WAL
-        if (db.isBlacklisted(identifier) || db.getLeadByIdentifier(identifier)) {
+        // Checagem anti-duplicação no SQLite WAL isolada por usuário
+        if (db.isBlacklisted(identifier, uid) || db.getLeadByIdentifier(identifier, uid)) {
           console.log(`⏭️ [TargetScraper] Pulando ${identifier} (já cadastrado ou na blacklist).`);
           continue;
         }
@@ -169,7 +170,7 @@ class TargetScraper {
             name: fullName,
             status: isPrivate ? 'disqualified' : 'new',
             ai_summary: isPrivate ? 'Conta privada descartada automaticamente' : (bioText || 'Sem bio informada')
-          });
+          }, uid);
 
           collectedLeads.push(savedLead);
           console.log(`✅ [TargetScraper] Salvo no banco: ${identifier} (Nome: "${fullName}", Bio: "${bioText ? bioText.slice(0, 45) + '...' : 'Sem bio'}") | Privado: ${isPrivate ? 'Sim' : 'Não'}`);
@@ -182,7 +183,7 @@ class TargetScraper {
 
     } catch (error) {
       console.error(`❌ [TargetScraper] Erro durante raspagem: ${error.message}`);
-      accountRotator.markAccountChallenged('scraper', account.username, error.message);
+      accountRotator.markAccountChallenged('scraper', account.username, error.message, uid);
       throw error;
     } finally {
       await browser.close();

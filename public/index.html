@@ -15,8 +15,8 @@
   <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
-  <!-- Top Navigation Bar -->
-  <header class="topbar">
+  <!-- Top Navigation Bar (Oculta até autenticação JWT válida) -->
+  <header id="appTopbar" class="topbar hidden">
     <div class="topbar-inner">
       <div class="brand">
         <img src="apple-icon.png" alt="Legado Performance" class="topbar-logo" style="height: 38px; width: auto; object-fit: contain; filter: drop-shadow(0 0 14px rgba(0, 149, 255, 0.45)); margin-right: 10px;">
@@ -28,16 +28,25 @@
       </div>
 
       <div class="topbar-actions">
-        <div class="status-indicator">
+        <div class="status-indicator" title="Conta autenticada">
           <span class="pulse-dot"></span>
-          <span class="status-text">Servidor Ativo</span>
-          <span class="status-meta">Porta 3000 &bull; WAL Mode</span>
+          <span class="status-text" id="userRoleBadge">Conta Ativa</span>
+          <span class="status-meta" id="userEmailBadge">...</span>
         </div>
         <div id="btnWaIndicator" class="status-indicator status-indicator-clickable" role="button" tabindex="0" title="WhatsApp Baileys Nativo: Clique para conectar ou ler QR Code">
           <span class="pulse-dot" id="waPulseDot" style="background-color: var(--amber); box-shadow: 0 0 6px var(--amber);"></span>
           <span class="status-text" id="waStatusText" style="color: var(--amber);">WhatsApp: Carregando...</span>
           <span class="status-meta" id="waStatusMeta">QR Code</span>
         </div>
+        <button id="btnOpenAdminClients" class="btn btn-primary-gold btn-sm hidden" type="button" title="Painel Administrativo: Gestão de Clientes SaaS">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>Gestão de Clientes</span>
+        </button>
         <button id="btnOpenSettings" class="btn btn-secondary btn-sm" type="button" title="Conexões e Configurações de API">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path>
@@ -66,7 +75,7 @@
     </div>
   </header>
 
-  <main class="main-container">
+  <main id="appMainContainer" class="main-container hidden">
     <!-- Top KPI Grid: 6 Cards perfeitamente alinhados em 1 linha -->
     <section class="kpi-grid">
       <div class="kpi-card">
@@ -527,6 +536,15 @@
           </svg>
           <span>Mensagens &amp; WhatsApp do Vendedor</span>
         </button>
+        <button id="btnTabClients" class="modal-tab-btn hidden" type="button">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          <span>Gestão de Clientes</span>
+        </button>
       </div>
 
       <div class="modal-content modal-content-tabs">
@@ -739,7 +757,7 @@
               <span>Destino no CRM &amp; Parâmetros Comerciais</span>
             </div>
             <div class="settings-grid">
-              <div class="form-field span-2">
+              <div id="crmDestinationGroup" class="form-field span-2">
                 <label for="cfgCrmDestination" class="form-label">Kanban / Conta de Destino no CRM</label>
                 <select id="cfgCrmDestination" class="form-input" style="font-size: 13px;">
                   <option value="">Carregando contas do CRM...</option>
@@ -859,6 +877,77 @@
             </div>
           </form>
         </div>
+
+        <!-- Aba 3: Gestão de Clientes (Exclusiva Admin) -->
+        <div id="tabClientsContent" class="tab-pane hidden">
+          <div class="settings-form-box">
+            <div class="settings-form-title">
+              <span>Cadastrar Novo Cliente (Multi-Tenant SaaS)</span>
+            </div>
+            <form id="formCreateUser" autocomplete="off">
+              <div class="settings-grid">
+                <div class="form-field">
+                  <label for="newUserEmail" class="form-label">E-mail de Acesso do Cliente</label>
+                  <input type="email" id="newUserEmail" class="form-input" placeholder="cliente@empresa.com" required autocomplete="off">
+                </div>
+                <div class="form-field">
+                  <label for="newUserPassword" class="form-label">Senha Inicial (mín. 6 caracteres)</label>
+                  <input type="password" id="newUserPassword" class="form-input" placeholder="Senha forte" required minlength="6" autocomplete="new-password">
+                </div>
+                <div class="form-field">
+                  <label for="newUserMaxChips" class="form-label">Limite de Chips WhatsApp (max_chips)</label>
+                  <input type="number" id="newUserMaxChips" class="form-input font-mono" value="1" min="1" max="999" required>
+                </div>
+                <div class="form-field">
+                  <label for="newUserRole" class="form-label">Perfil / Permissão</label>
+                  <select id="newUserRole" class="form-input">
+                    <option value="user">Cliente (user)</option>
+                    <option value="admin">Administrador (admin)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="settings-form-actions" style="margin-top: 14px;">
+                <button type="submit" id="btnCreateUser" class="btn btn-primary-gold btn-sm">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                  </svg>
+                  <span>Criar Conta de Cliente</span>
+                </button>
+                <span id="createUserFeedback" class="feedback-text"></span>
+              </div>
+            </form>
+          </div>
+
+          <div class="accounts-list-wrap" style="margin-top: 18px;">
+            <div class="accounts-header">
+              <div class="accounts-title">
+                <span>Clientes e Operadores Cadastrados</span>
+                <span id="usersBadgeCount" class="records-pill font-mono">0 usuários</span>
+              </div>
+              <button id="btnRefreshUsers" class="btn-text-action" type="button">Atualizar lista</button>
+            </div>
+            <div class="accounts-table-container">
+              <table class="data-table accounts-table">
+                <thead>
+                  <tr>
+                    <th>E-mail</th>
+                    <th>Perfil</th>
+                    <th>Chips (Conectados / Máx.)</th>
+                    <th>Leads</th>
+                    <th>Status</th>
+                    <th style="text-align: right; width: 200px;">Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="usersTableBody">
+                  <tr>
+                    <td colspan="6" class="table-msg">Carregando usuários...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div class="modal-foot">
@@ -884,6 +973,13 @@
       </div>
 
       <div class="modal-content" style="padding: 24px; text-align: center;">
+        <!-- Seletor de Chips Multi-Tenant -->
+        <div id="waSessionControls" style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; background: var(--bg-card-subtle); padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-subtle);">
+          <select id="waSessionSelect" class="form-input" style="font-size: 12px; padding: 6px 10px; flex: 1;"></select>
+          <span id="waChipsQuotaBadge" class="records-pill font-mono" style="white-space: nowrap;">1/1 chips</span>
+          <button id="btnWaAddSession" type="button" class="btn btn-secondary btn-xs" title="Adicionar novo chip WhatsApp dentro do seu limite">+ Novo Chip</button>
+        </div>
+
         <!-- Status Box -->
         <div id="waStatusBanner" class="wa-status-box" style="margin-bottom: 20px;">
           <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -999,8 +1095,8 @@
     </div>
   </div>
 
-  <!-- Modal / Overlay de Login de Administrador — Identidade Legado Performance Oficial -->
-  <div id="loginOverlay" class="login-overlay hidden" role="dialog" aria-modal="true">
+  <!-- Overlay de Login Multi-Tenant (Visível por padrão até validação de sessão) -->
+  <div id="loginOverlay" class="login-overlay" role="dialog" aria-modal="true">
     <canvas id="loginConstellationCanvas" class="login-constellation"></canvas>
     <div class="login-scanline"></div>
     <div class="login-gradient-backdrop"></div>
@@ -1008,19 +1104,24 @@
     <div class="login-wrapper">
       <div class="login-header-hero">
         <img src="apple-icon.png" alt="Legado Performance" class="login-logo-hero" />
-        <p class="login-hero-subtitle">PERFORMANCE EM INTEGRAÇÕES & ESCALA</p>
+        <p class="login-hero-subtitle">PERFORMANCE EM INTEGRAÇÕES &amp; ESCALA</p>
       </div>
 
       <div class="login-card-pro">
         <div class="login-card-header">
           <h2 class="login-card-title">ACESSO RESTRITO</h2>
-          <p class="login-card-desc">OPERAÇÃO LEGADO PERFORMANCE DIGITAL</p>
+          <p class="login-card-desc">PLATAFORMA SDR MULTI-TENANT &bull; LEGADO DIGITAL</p>
         </div>
 
-        <form id="formLogin" class="login-form-inner" autocomplete="off">
+        <form id="formLogin" class="login-form-inner" autocomplete="on">
+          <div class="form-field-pro" style="margin-bottom: 14px;">
+            <label for="loginEmail" class="form-label-pro">E-MAIL DE ACESSO</label>
+            <input type="email" id="loginEmail" class="form-input-pro" placeholder="seu@email.com" required autocomplete="email" autofocus />
+          </div>
+
           <div class="form-field-pro">
-            <label for="loginPassword" class="form-label-pro">CHAVE MESTRA</label>
-            <input type="password" id="loginPassword" class="form-input-pro" placeholder="••••••••••••" required autocomplete="current-password" autofocus />
+            <label for="loginPassword" class="form-label-pro">SENHA</label>
+            <input type="password" id="loginPassword" class="form-input-pro" placeholder="••••••••••••" required autocomplete="current-password" />
           </div>
 
           <button type="submit" id="btnLoginSubmit" class="btn-connect-pro">
@@ -1036,6 +1137,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=5"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

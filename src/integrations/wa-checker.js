@@ -1,22 +1,18 @@
-import whatsappClient, {
-  checkWhatsappNumbers,
-  checkNumberOnWhatsApp,
-  isNativeConnected,
-  normalizePhoneForWhatsApp
+import {
+  checkWhatsappNumbersForUser,
+  checkNumberOnWhatsAppForUser
 } from './whatsapp-client.js';
 
 export class WhatsAppValidationEngine {
   /**
-   * Valida em lote se números telefônicos (fixos de 8 dígitos ou celulares de 9 dígitos) possuem conta ativa no WhatsApp
-   * @param {Array<string>} phoneNumbers - Lista de telefones no formato E.164 ou formato bruto
-   * @param {number} batchSize - Tamanho de cada bloco de consulta
+   * Valida em lote se números telefônicos possuem conta ativa no WhatsApp usando estritamente o chip do tenant
    */
-  async validateNumbers(phoneNumbers = [], batchSize = 10) {
-    const resultsMap = new Map();
+  async validateNumbers(phoneNumbers = [], batchSize = 10, userId) {
+    if (!userId) {
+      throw new Error('userId obrigatório para validar números no WhatsApp.');
+    }
 
-    // Filtra e limpa a lista.
-    // REGRA CRÍTICA: NÃO descarta fixos comerciais de 8 dígitos locais (ou 10 com DDD / 12 com 55).
-    // Qualquer número com 8 ou mais dígitos é preservado para consulta real no Baileys.
+    const resultsMap = new Map();
     const cleanList = phoneNumbers
       .map(p => String(p).replace(/\D/g, ''))
       .filter(p => p.length >= 8);
@@ -25,13 +21,13 @@ export class WhatsAppValidationEngine {
       return resultsMap;
     }
 
-    console.log(`🔍 [WhatsAppChecker] Validando ${cleanList.length} números via Baileys Nativo (preservando fixos de 8 dígitos e celulares de 9 dígitos)...`);
+    console.log(`🔍 [WhatsAppChecker] (User #${userId}) Validando ${cleanList.length} números via Baileys Nativo...`);
 
     for (let i = 0; i < cleanList.length; i += batchSize) {
       const batch = cleanList.slice(i, i + batchSize);
 
       try {
-        const batchResults = await checkWhatsappNumbers(batch);
+        const batchResults = await checkWhatsappNumbersForUser(userId, batch);
 
         for (const item of batchResults) {
           resultsMap.set(item.phone, {
@@ -42,7 +38,7 @@ export class WhatsAppValidationEngine {
           });
         }
       } catch (err) {
-        console.warn(`⚠️ [WhatsAppChecker] Aviso: Erro ao validar lote via Baileys (${err.message}). Prosseguindo com status padrão.`);
+        console.warn(`⚠️ [WhatsAppChecker] (User #${userId}) Erro ao validar lote: ${err.message}`);
         for (const phone of batch) {
           resultsMap.set(phone, {
             exists: false,
@@ -53,7 +49,6 @@ export class WhatsAppValidationEngine {
         }
       }
 
-      // Pequena pausa entre lotes para manter cadência saudável de requisições
       if (i + batchSize < cleanList.length) {
         await new Promise(resolve => setTimeout(resolve, 250));
       }
@@ -62,11 +57,8 @@ export class WhatsAppValidationEngine {
     return resultsMap;
   }
 
-  /**
-   * Validação de um número individual (fixo ou móvel)
-   */
-  async validateSingle(phone) {
-    return checkNumberOnWhatsApp(phone);
+  async validateSingle(phone, userId) {
+    return checkNumberOnWhatsAppForUser(userId, phone);
   }
 }
 

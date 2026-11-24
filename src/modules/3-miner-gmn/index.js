@@ -13,6 +13,7 @@ import path from 'path';
  */
 export async function runGmnPipeline(options = {}) {
   const isCli = !options.fromApi;
+  const userId = Number(options.userId) || db.getAdminUserId();
   const args = process.argv.slice(2);
   const queryArg = options.query || args.find(a => a.startsWith('--query='))?.split('=')[1] || 'Clinica Odontologica Campinas SP';
   const limitArg = options.limit ? parseInt(options.limit, 10) : parseInt(args.find(a => a.startsWith('--limit='))?.split('=')[1] || '15', 10);
@@ -55,7 +56,7 @@ export async function runGmnPipeline(options = {}) {
 
     // 3. Validação de WhatsApp em Lote (Fixos comerciais e Celulares)
     console.log(`\n📌 [PASSO 3/4] Validando WhatsApp ativo para ${phonesToValidate.length} números higienizados...`);
-    const waStatusMap = await waChecker.validateNumbers(phonesToValidate);
+    const waStatusMap = await waChecker.validateNumbers(phonesToValidate, 10, userId);
 
     // 4. Gravação no Banco SQLite WAL e Preparação da Lista para Exportação
     console.log(`\n📌 [PASSO 4/4] Salvando leads no banco relacional e gerando planilha Excel...`);
@@ -112,7 +113,7 @@ export async function runGmnPipeline(options = {}) {
         niche: queryArg,
         status: leadStatus,
         ai_summary: `Minerado GMN: ${item.address || 'Sem endereço'} | Avaliação: ${ratingSummary} | Site: ${item.website || 'Sem site'}${item.instagramUsername ? ` | IG: ${item.instagramUsername}` : ''}`
-      });
+      }, userId);
 
       if (item.instagramUsername) {
         console.log(`📸 [Minerador] Instagram ${item.instagramUsername} vinculado ao lead da empresa "${item.companyName}" (sem duplicata no banco).`);
@@ -128,7 +129,7 @@ export async function runGmnPipeline(options = {}) {
     }
 
     // Exporta para Planilha XLSX
-    const exportResult = leadExporter.exportToExcel(finalLeadsForExport, queryArg);
+    const exportResult = leadExporter.exportToExcel(finalLeadsForExport, queryArg, userId);
 
     console.log('\n================================================================');
     console.log('🎉 MINERAÇÃO B2B CONCLUÍDA COM SUCESSO');

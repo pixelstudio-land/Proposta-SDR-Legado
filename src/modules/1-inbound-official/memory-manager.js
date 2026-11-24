@@ -1,16 +1,13 @@
 import db from '../../database/db.js';
 
 class ConversationMemoryManager {
-  /**
-   * Obtém um lead existente ou cria um novo registro garantindo o histórico
-   */
-  getOrCreateLead(identifier, initialMetadata = {}) {
+  getOrCreateLead(identifier, initialMetadata = {}, userId = null) {
     if (!identifier) {
       throw new Error('Identificador obrigatório para inicializar memória de conversa.');
     }
-
+    const uid = userId || initialMetadata.user_id || db.getAdminUserId();
     const cleanIdentifier = String(identifier).trim();
-    let lead = db.getLeadByIdentifier(cleanIdentifier);
+    let lead = db.getLeadByIdentifier(cleanIdentifier, uid);
 
     if (!lead) {
       lead = db.createOrUpdateLead({
@@ -19,32 +16,28 @@ class ConversationMemoryManager {
         name: initialMetadata.name || null,
         phone: initialMetadata.phone || null,
         status: 'new'
-      });
+      }, uid);
     }
 
     return lead;
   }
 
-  /**
-   * Resgata as últimas N interações da conversa para alimentar o contexto da IA
-   */
-  getConversationHistory(leadId, limit = 15) {
+  getConversationHistory(leadId, limit = 15, userId = null) {
     if (!leadId) return [];
-    return db.getConversationHistory(leadId, limit);
+    const uid = userId || db.getAdminUserId();
+    return db.getConversationHistory(leadId, limit, uid);
   }
 
-  /**
-   * Grava atomicamente o turno da conversa (pergunta do usuário + resposta da IA)
-   */
-  saveTurn(leadId, userMessage, assistantReply) {
+  saveTurn(leadId, userMessage, assistantReply, userId = null) {
     if (!leadId) return;
+    const uid = userId || db.getAdminUserId();
 
     if (userMessage && String(userMessage).trim()) {
-      db.addConversationMessage(leadId, 'user', String(userMessage).trim());
+      db.addConversationMessage(leadId, 'user', String(userMessage).trim(), uid);
     }
 
     if (assistantReply && String(assistantReply).trim()) {
-      db.addConversationMessage(leadId, 'assistant', String(assistantReply).trim());
+      db.addConversationMessage(leadId, 'assistant', String(assistantReply).trim(), uid);
     }
   }
 }

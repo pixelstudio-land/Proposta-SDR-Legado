@@ -9,17 +9,19 @@ import { getColdCopywriterPrompt } from './prompts/cold-copywriter.prompt.js';
 class OpenAiEngine {
   constructor() {
     this.model = settings.openai.model;
-    this.currentKey = null;
-    this.client = null;
+    this.clientsByUser = new Map();
   }
 
-  getClient() {
-    const activeKey = db.getSetting('openai_api_key') || settings.openai.apiKey || 'sk-dummy-key-for-init';
-    if (!this.client || this.currentKey !== activeKey) {
-      this.client = new OpenAI({ apiKey: activeKey });
-      this.currentKey = activeKey;
+  getClient(userId = null) {
+    const uid = userId || db.getAdminUserId();
+    const activeKey = db.getSetting('openai_api_key', null, uid) || settings.openai.apiKey || 'sk-dummy-key-for-init';
+    const cached = this.clientsByUser.get(uid);
+    if (!cached || cached.key !== activeKey) {
+      const client = new OpenAI({ apiKey: activeKey });
+      this.clientsByUser.set(uid, { key: activeKey, client });
+      return client;
     }
-    return this.client;
+    return cached.client;
   }
 
   async sleep(ms) {
@@ -43,7 +45,7 @@ class OpenAiEngine {
 
     while (attempt < maxRetries) {
       try {
-        const client = this.getClient();
+        const client = this.getClient(customOptions.userId);
         const response = await client.chat.completions.create(requestPayload);
         const choice = response.choices?.[0];
         if (!choice || !choice.message) {
@@ -83,7 +85,8 @@ class OpenAiEngine {
     const rawResponse = await this.generateChatCompletion(conversationPayload, {
       temperature: 0.4,
       maxTokens: 600,
-      responseFormat: { type: 'json_object' }
+      responseFormat: { type: 'json_object' },
+      userId: leadContext.user_id
     });
 
     try {
@@ -113,16 +116,17 @@ class OpenAiEngine {
   /**
    * Realiza auditoria cognitiva na bio de um perfil de Instagram
    */
-  async auditProfileBio(bioText, username = '') {
+  async auditProfileBio(bioText, username = '', userId = null) {
     const { systemPrompt, userPrompt } = getProfileAuditorPrompt(username, bioText);
 
     try {
       const rawResponse = await this.generateChatCompletion([
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt }
-      ], { 
+      ], {
         temperature: 0.1,
-        responseFormat: { type: 'json_object' }
+        responseFormat: { type: 'json_object' },
+        userId
       });
 
       const parsed = parser.extractJson(rawResponse);
@@ -145,13 +149,13 @@ class OpenAiEngine {
   /**
    * Gera cold DM personalizada para disparo no Outbound
    */
-  async generateColdDM(targetData) {
+  async generateColdDM(targetData, userId = null) {
     const { systemPrompt, userPrompt } = getColdCopywriterPrompt(targetData);
 
     const message = await this.generateChatCompletion([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt }
-    ], { temperature: 0.7 });
+    ], { temperature: 0.7, userId });
 
     return message.replace(/^["']|["']$/g, '').trim();
   }
